@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Dumbbell, 
   Calendar as CalendarIcon, 
@@ -21,7 +21,9 @@ import {
   ArrowLeft,
   Trophy,
   History,
-  Zap
+  Zap,
+  Activity,
+  UserCheck
 } from 'lucide-react';
 
 export default function WorkoutApp() {
@@ -57,16 +59,36 @@ export default function WorkoutApp() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // BODY MEASUREMENTS STATE
+  const [bodyStats, setBodyStats] = useState(() => {
+    const saved = localStorage.getItem('pm_body_stats');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', date: '2026-08-01', weight: 82.5, chest: 108, arm: 39, waist: 86, thigh: 61 }
+    ];
+  });
+
   // UI STATES
   const [activeTab, setActiveTab] = useState('start');
+  const [statsSubTab, setStatsSubTab] = useState('records'); // 'records' | 'body' | 'history'
+  const [selectedBodyPart, setSelectedBodyPart] = useState('arm');
   const [newExName, setNewExName] = useState('');
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [selectedExForPlan, setSelectedExForPlan] = useState([]);
   const [selectedStatExId, setSelectedStatExId] = useState(null);
 
+  // MEASUREMENT FORM STATE
+  const [newWeight, setNewWeight] = useState('');
+  const [newChest, setNewChest] = useState('');
+  const [newArm, setNewArm] = useState('');
+  const [newWaist, setNewWaist] = useState('');
+  const [newThigh, setNewThigh] = useState('');
+
   // WORKOUT SESSION STATE
   const [activeSession, setActiveSession] = useState(null);
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
+
   const [activeExIdx, setActiveExIdx] = useState(0);
   const [showStartModal, setShowStartModal] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -85,23 +107,28 @@ export default function WorkoutApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // SAVE TO LOCALSTORAGE
+  // SAVE TO LOCALSTORAGE (OPTIMIZED)
   useEffect(() => { localStorage.setItem('pm_theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('pm_exercises', JSON.stringify(exerciseDb)); }, [exerciseDb]);
   useEffect(() => { localStorage.setItem('pm_plans', JSON.stringify(plans)); }, [plans]);
   useEffect(() => { localStorage.setItem('pm_history', JSON.stringify(workoutHistory)); }, [workoutHistory]);
   useEffect(() => { localStorage.setItem('pm_marked_days', JSON.stringify(markedDays)); }, [markedDays]);
+  useEffect(() => { localStorage.setItem('pm_body_stats', JSON.stringify(bodyStats)); }, [bodyStats]);
 
-  // TIMER
+  // OPTIMIZED TIMER (NEVER TRIGGERS APP RE-RENDERS/LOCALSTORAGE SAVES ON TICK)
   useEffect(() => {
     let interval = null;
     if (activeSession) {
-      interval = setInterval(() => setTimerSeconds(prev => prev + 1), 1000);
+      interval = setInterval(() => {
+        setTimerSeconds(prev => prev + 1);
+      }, 1000);
     } else {
       setTimerSeconds(0);
     }
-    return () => clearInterval(interval);
-  }, [activeSession]);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeSession ? true : false]);
 
   const formatTime = (sec) => {
     const hrs = Math.floor(sec / 3600);
@@ -195,6 +222,29 @@ export default function WorkoutApp() {
     setActiveSession(null);
   };
 
+  const deleteWorkoutHistory = (id) => {
+    setWorkoutHistory(prev => prev.filter(item => item.id !== id));
+  };
+
+  const saveBodyStats = (e) => {
+    e.preventDefault();
+    if (!newWeight && !newArm && !newWaist && !newChest && !newThigh) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const newEntry = {
+      id: Date.now().toString(),
+      date: todayStr,
+      weight: parseFloat(newWeight) || 0,
+      chest: parseFloat(newChest) || 0,
+      arm: parseFloat(newArm) || 0,
+      waist: parseFloat(newWaist) || 0,
+      thigh: parseFloat(newThigh) || 0
+    };
+
+    setBodyStats([newEntry, ...bodyStats]);
+    setNewWeight(''); setNewChest(''); setNewArm(''); setNewWaist(''); setNewThigh('');
+  };
+
   const toggleDayMark = (dateStr) => {
     if (markedDays.includes(dateStr)) {
       setMarkedDays(markedDays.filter(d => d !== dateStr));
@@ -260,24 +310,36 @@ END:VCALENDAR`;
     ? workoutHistory.filter(w => w.date === selectedHistoryDate)
     : [];
 
+  const latestStats = bodyStats[0] || {};
+
   return (
     <div className={`min-h-screen ${bgMain} flex flex-col font-sans transition-colors duration-200 relative`}>
       
-      {/* EKRAN POWITALNY (SPLASH SCREEN Z GIF-EM) */}
+      {/* EKRAN POWITALNY (SPLASH SCREEN Z PASEK ŁADOWANIA FORMY) */}
       {showSplash && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500 p-6 text-center">
           <img 
             src="/logo.gif?v=1" 
             alt="Pakiernia U Matiego" 
-            className="w-48 h-48 object-cover rounded-2xl mb-4 border-2 border-cyan-400 shadow-xl shadow-cyan-500/30" 
+            className="w-44 h-44 object-cover rounded-2xl mb-4 border-2 border-cyan-400 shadow-xl shadow-cyan-500/30" 
           />
           <h1 className="text-xl font-black uppercase tracking-widest text-cyan-400">
             PAKIERNIA U MATIEGO
           </h1>
-          <p className="text-xs text-neutral-400 mt-2 tracking-widest uppercase font-mono flex items-center space-x-1">
-            <Zap className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
-            <span>Ładowanie formy...</span>
-          </p>
+          
+          {/* PASEK ŁADOWANIA FORMY */}
+          <div className="w-64 max-w-xs mt-6 space-y-2">
+            <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-wider text-neutral-400">
+              <span className="flex items-center space-x-1">
+                <Zap className="h-3 w-3 text-cyan-400 animate-pulse" />
+                <span>Ładowanie formy...</span>
+              </span>
+              <span className="text-cyan-400 font-bold">100%</span>
+            </div>
+            <div className="h-2 w-full bg-neutral-800 rounded-full overflow-hidden border border-neutral-700">
+              <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full animate-pulse transition-all duration-1000 w-full"></div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -298,7 +360,7 @@ END:VCALENDAR`;
       </header>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 max-w-lg w-full mx-auto pb-24">
+      <main className="flex-1 p-4 max-w-lg w-full mx-auto pb-28">
         
         {/* ACTIVE WORKOUT MODE */}
         {activeSession ? (
@@ -376,19 +438,21 @@ END:VCALENDAR`;
                 <div className="col-span-2 text-center">Kopiuj</div>
               </div>
 
-              {/* SET ROWS */}
+              {/* SET ROWS WITH NUMERIC KEYBOARD */}
               {currentEx?.sets.map((set, sIdx) => (
                 <div key={sIdx} className="grid grid-cols-12 gap-2 items-center">
                   <span className={`col-span-1 font-bold text-xs ${textMuted}`}>{sIdx + 1}</span>
                   <input 
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
                     value={set.reps}
                     onChange={(e) => updateSet(activeExIdx, sIdx, 'reps', e.target.value)}
                     className={`col-span-4 border rounded-lg p-2 text-center font-bold text-sm ${bgInput}`}
                   />
                   <input 
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
                     value={set.weight}
                     onChange={(e) => updateSet(activeExIdx, sIdx, 'weight', e.target.value)}
@@ -583,11 +647,19 @@ END:VCALENDAR`;
 
                     {historyForSelectedDate.length > 0 ? (
                       historyForSelectedDate.map(h => (
-                        <div key={h.id} className="space-y-3">
-                          <div className="flex justify-between items-center">
+                        <div key={h.id} className="space-y-3 relative">
+                          <div className="flex justify-between items-center pr-6">
                             <span className={`font-black text-sm ${accentText}`}>{h.planName}</span>
                             <span className={`text-xs ${textMuted}`}>{h.duration} | Tonaż: {h.totalWeight} kg</span>
                           </div>
+
+                          <button 
+                            onClick={() => deleteWorkoutHistory(h.id)}
+                            className="absolute top-0 right-0 text-neutral-500 hover:text-red-500 p-1"
+                            title="Usuń trening z historii"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                           
                           <div className="space-y-3 pt-1">
                             {h.exercises.map((e, idx) => (
@@ -613,104 +685,270 @@ END:VCALENDAR`;
               </div>
             )}
 
-            {/* TAB 3: STATYSTYKI ĆWICZEŃ & REKORDY */}
+            {/* TAB 3: STATYSTYKI & POMIARY FORMIE */}
             {activeTab === 'stats' && (
               <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-bold">Statystyki i Rekordy (PR)</h2>
-                  <p className={`text-xs ${textMuted}`}>Sprawdź historię ciężarów dla każdego ćwiczenia osobno.</p>
-                </div>
-
-                {/* PERSONAL RECORDS (BEST WEIGHT PER EXERCISE) */}
-                <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-                  <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                    <Trophy className="h-4 w-4 text-amber-400" />
-                    <span>Rekordy Życiowe (Max Ciężar)</span>
-                  </h3>
-                  <div className="space-y-2">
-                    {exerciseDb.map(ex => {
-                      let maxWeight = 0;
-                      let bestReps = 0;
-
-                      workoutHistory.forEach(w => {
-                        const found = w.exercises.find(e => (e.id && e.id === ex.id) || e.name === ex.name);
-                        if (found) {
-                          found.sets.forEach(s => {
-                            const wVal = parseFloat(s.weight) || 0;
-                            const rVal = parseInt(s.reps) || 0;
-                            if (wVal > maxWeight) {
-                              maxWeight = wVal;
-                              bestReps = rVal;
-                            }
-                          });
-                        }
-                      });
-
-                      return (
-                        <div key={ex.id} className="flex justify-between items-center text-xs py-1.5 border-b border-gray-100 dark:border-neutral-800 last:border-0">
-                          <span className="font-semibold">{ex.name}</span>
-                          <span className={`font-bold font-mono ${maxWeight > 0 ? accentText : textMuted}`}>
-                            {maxWeight > 0 ? `${maxWeight} kg (${bestReps} powt.)` : 'Brak danych'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* DETAILED EXERCISE HISTORY FINDER */}
-                <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-                  <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                    <History className={`h-4 w-4 ${accentText}`} />
-                    <span>Szczegółowa Historia Ćwiczenia</span>
-                  </h3>
-                  
-                  {/* EXERCISE SELECTOR */}
-                  <select 
-                    onChange={(e) => setSelectedStatExId(e.target.value)}
-                    value={selectedStatExId || ''}
-                    className={`w-full p-2.5 rounded-lg border text-xs font-bold ${bgInput}`}
+                
+                {/* SUB-TABS NAVIGATION */}
+                <div className={`p-1 rounded-xl border flex text-xs font-bold ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-gray-200 border-gray-300'}`}>
+                  <button 
+                    onClick={() => setStatsSubTab('records')}
+                    className={`flex-1 py-2 rounded-lg text-center transition-all ${statsSubTab === 'records' ? accentBg : textMuted}`}
                   >
-                    <option value="">-- Wybierz ćwiczenie z bazy --</option>
-                    {exerciseDb.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.name}</option>
-                    ))}
-                  </select>
-
-                  {/* DISPLAY DRILL-DOWN HISTORY */}
-                  {selectedStatExId && (
-                    <div className="space-y-2 pt-2">
-                      {(() => {
-                        const targetEx = exerciseDb.find(e => e.id === selectedStatExId);
-                        const exHistory = workoutHistory.filter(w => 
-                          w.exercises.some(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name)
-                        );
-
-                        if (exHistory.length === 0) {
-                          return <p className={`text-xs ${textMuted} text-center py-2`}>Brak wykonanych treningów z tym ćwiczeniem.</p>;
-                        }
-
-                        return exHistory.map((w, idx) => {
-                          const exDetails = w.exercises.find(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name);
-                          return (
-                            <div key={idx} className={`p-3 rounded-lg border space-y-1.5 text-xs ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
-                              <div className="flex justify-between font-bold">
-                                <span>{w.date} ({w.planName})</span>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {exDetails?.sets.map((s, sIdx) => (
-                                  <span key={sIdx} className={`px-2 py-1 rounded text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-gray-300 text-cyan-800'}`}>
-                                    S{sIdx + 1}: <strong>{s.reps || 0}</strong> × <strong>{s.weight || 0}kg</strong>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  )}
+                    Rekordy PR
+                  </button>
+                  <button 
+                    onClick={() => setStatsSubTab('body')}
+                    className={`flex-1 py-2 rounded-lg text-center transition-all ${statsSubTab === 'body' ? accentBg : textMuted}`}
+                  >
+                    Pomiary Ciała
+                  </button>
+                  <button 
+                    onClick={() => setStatsSubTab('history')}
+                    className={`flex-1 py-2 rounded-lg text-center transition-all ${statsSubTab === 'history' ? accentBg : textMuted}`}
+                  >
+                    Ćwiczenia
+                  </button>
                 </div>
+
+                {/* SUB-TAB 1: REKORDY ŻYCIOWE */}
+                {statsSubTab === 'records' && (
+                  <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
+                    <h3 className="font-bold text-sm flex items-center space-x-1.5">
+                      <Trophy className="h-4 w-4 text-amber-400" />
+                      <span>Rekordy Życiowe (Max Ciężar)</span>
+                    </h3>
+                    <div className="space-y-2">
+                      {exerciseDb.map(ex => {
+                        let maxWeight = 0;
+                        let bestReps = 0;
+
+                        workoutHistory.forEach(w => {
+                          const found = w.exercises.find(e => (e.id && e.id === ex.id) || e.name === ex.name);
+                          if (found) {
+                            found.sets.forEach(s => {
+                              const wVal = parseFloat(s.weight) || 0;
+                              const rVal = parseInt(s.reps) || 0;
+                              if (wVal > maxWeight) {
+                                maxWeight = wVal;
+                                bestReps = rVal;
+                              }
+                            });
+                          }
+                        });
+
+                        return (
+                          <div key={ex.id} className="flex justify-between items-center text-xs py-1.5 border-b border-gray-100 dark:border-neutral-800 last:border-0">
+                            <span className="font-semibold">{ex.name}</span>
+                            <span className={`font-bold font-mono ${maxWeight > 0 ? accentText : textMuted}`}>
+                              {maxWeight > 0 ? `${maxWeight} kg (${bestReps} powt.)` : 'Brak danych'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* SUB-TAB 2: POMIARY FORMIE & SZKIELET ANATOMII */}
+                {statsSubTab === 'body' && (
+                  <div className="space-y-4">
+                    
+                    {/* WIZUALIZACJA SZKIELETU & DANYCH */}
+                    <div className={`p-4 rounded-xl border space-y-4 ${bgCard}`}>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-sm flex items-center space-x-1.5">
+                          <Activity className={`h-4 w-4 ${accentText}`} />
+                          <span>Anatomia Formy & Wyniki</span>
+                        </h3>
+                        <span className={`text-[10px] font-mono ${textMuted}`}>Ostatnia zmiana: {latestStats.date || 'Brak'}</span>
+                      </div>
+
+                      {/* ANATOMICAL SKELETON DIAGRAM */}
+                      <div className="relative w-full h-56 bg-neutral-950/50 rounded-2xl border border-neutral-800 flex items-center justify-center overflow-hidden p-2">
+                        {/* SVG HUMAN OUTLINE SKELETON */}
+                        <svg className="h-full w-auto text-neutral-700 stroke-current" viewBox="0 0 100 200" fill="none" strokeWidth="2">
+                          {/* Głowa */}
+                          <circle cx="50" cy="20" r="12" />
+                          {/* Szyja & Barki */}
+                          <path d="M50 32 V 42 M30 48 H 70" />
+                          {/* Klatka / Tułów */}
+                          <path d="M30 48 L 35 110 H 65 L 70 48 Z" />
+                          {/* Biceps Ramiona */}
+                          <path d="M30 48 L 18 80 M70 48 L 82 80" />
+                          {/* Nogi */}
+                          <path d="M40 110 L 38 180 M60 110 L 62 180" />
+                        </svg>
+
+                        {/* INTERACTIVE BODY TARGET POINTS */}
+                        {/* BICEPS */}
+                        <button 
+                          onClick={() => setSelectedBodyPart('arm')}
+                          className={`absolute top-16 left-12 p-1.5 rounded-full text-[10px] font-mono font-extrabold border transition-all ${
+                            selectedBodyPart === 'arm' ? 'bg-cyan-400 text-black border-white scale-110 shadow-lg shadow-cyan-400/50' : 'bg-neutral-900 text-cyan-400 border-cyan-500/40'
+                          }`}
+                        >
+                          Ramię: {latestStats.arm || 0}cm
+                        </button>
+
+                        {/* KLATKA */}
+                        <button 
+                          onClick={() => setSelectedBodyPart('chest')}
+                          className={`absolute top-12 right-10 p-1.5 rounded-full text-[10px] font-mono font-extrabold border transition-all ${
+                            selectedBodyPart === 'chest' ? 'bg-cyan-400 text-black border-white scale-110 shadow-lg shadow-cyan-400/50' : 'bg-neutral-900 text-cyan-400 border-cyan-500/40'
+                          }`}
+                        >
+                          Klatka: {latestStats.chest || 0}cm
+                        </button>
+
+                        {/* PAS */}
+                        <button 
+                          onClick={() => setSelectedBodyPart('waist')}
+                          className={`absolute top-28 left-8 p-1.5 rounded-full text-[10px] font-mono font-extrabold border transition-all ${
+                            selectedBodyPart === 'waist' ? 'bg-cyan-400 text-black border-white scale-110 shadow-lg shadow-cyan-400/50' : 'bg-neutral-900 text-cyan-400 border-cyan-500/40'
+                          }`}
+                        >
+                          Pas: {latestStats.waist || 0}cm
+                        </button>
+
+                        {/* UDO */}
+                        <button 
+                          onClick={() => setSelectedBodyPart('thigh')}
+                          className={`absolute bottom-8 right-12 p-1.5 rounded-full text-[10px] font-mono font-extrabold border transition-all ${
+                            selectedBodyPart === 'thigh' ? 'bg-cyan-400 text-black border-white scale-110 shadow-lg shadow-cyan-400/50' : 'bg-neutral-900 text-cyan-400 border-cyan-500/40'
+                          }`}
+                        >
+                          Udo: {latestStats.thigh || 0}cm
+                        </button>
+                      </div>
+
+                      {/* SUMMARY BODY WEIGHT DISPLAY */}
+                      <div className={`p-3 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className="flex items-center space-x-2">
+                          <UserCheck className={`h-5 w-5 ${accentText}`} />
+                          <div>
+                            <div className="text-xs font-bold">Waga Ciała</div>
+                            <div className={`text-xs ${textMuted}`}>Ostatni pomiar</div>
+                          </div>
+                        </div>
+                        <div className="text-xl font-black font-mono tracking-tight text-cyan-400">
+                          {latestStats.weight || 0} <span className="text-xs">kg</span>
+                        </div>
+                      </div>
+
+                      {/* FORMULARZ DODAWANIA POMIARÓW */}
+                      <form onSubmit={saveBodyStats} className="space-y-3 pt-2 border-t border-neutral-800">
+                        <div className="text-xs font-bold">Dodaj nowy pomiar:</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <input 
+                            type="text" 
+                            inputMode="decimal" 
+                            placeholder="Waga (kg)" 
+                            value={newWeight} 
+                            onChange={(e) => setNewWeight(e.target.value)} 
+                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                          />
+                          <input 
+                            type="text" 
+                            inputMode="decimal" 
+                            placeholder="Ramię (cm)" 
+                            value={newArm} 
+                            onChange={(e) => setNewArm(e.target.value)} 
+                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                          />
+                          <input 
+                            type="text" 
+                            inputMode="decimal" 
+                            placeholder="Klatka (cm)" 
+                            value={newChest} 
+                            onChange={(e) => setNewChest(e.target.value)} 
+                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                          />
+                          <input 
+                            type="text" 
+                            inputMode="decimal" 
+                            placeholder="Pas (cm)" 
+                            value={newWaist} 
+                            onChange={(e) => setNewWaist(e.target.value)} 
+                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                          />
+                          <input 
+                            type="text" 
+                            inputMode="decimal" 
+                            placeholder="Udo (cm)" 
+                            value={newThigh} 
+                            onChange={(e) => setNewThigh(e.target.value)} 
+                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                          />
+                          <button 
+                            type="submit" 
+                            className={`py-2 ${accentBg} font-bold rounded-lg text-xs`}
+                          >
+                            Zapisz
+                          </button>
+                        </div>
+                      </form>
+
+                    </div>
+
+                  </div>
+                )}
+
+                {/* SUB-TAB 3: SZCZEGÓŁOWA HISTORIA ĆWICZEŃ */}
+                {statsSubTab === 'history' && (
+                  <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
+                    <h3 className="font-bold text-sm flex items-center space-x-1.5">
+                      <History className={`h-4 w-4 ${accentText}`} />
+                      <span>Szczegółowa Historia Ćwiczenia</span>
+                    </h3>
+                    
+                    {/* EXERCISE SELECTOR */}
+                    <select 
+                      onChange={(e) => setSelectedStatExId(e.target.value)}
+                      value={selectedStatExId || ''}
+                      className={`w-full p-2.5 rounded-lg border text-xs font-bold ${bgInput}`}
+                    >
+                      <option value="">-- Wybierz ćwiczenie z bazy --</option>
+                      {exerciseDb.map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.name}</option>
+                      ))}
+                    </select>
+
+                    {/* DISPLAY DRILL-DOWN HISTORY */}
+                    {selectedStatExId && (
+                      <div className="space-y-2 pt-2">
+                        {(() => {
+                          const targetEx = exerciseDb.find(e => e.id === selectedStatExId);
+                          const exHistory = workoutHistory.filter(w => 
+                            w.exercises.some(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name)
+                          );
+
+                          if (exHistory.length === 0) {
+                            return <p className={`text-xs ${textMuted} text-center py-2`}>Brak wykonanych treningów z tym ćwiczeniem.</p>;
+                          }
+
+                          return exHistory.map((w, idx) => {
+                            const exDetails = w.exercises.find(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name);
+                            return (
+                              <div key={idx} className={`p-3 rounded-lg border space-y-1.5 text-xs ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                                <div className="flex justify-between font-bold">
+                                  <span>{w.date} ({w.planName})</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {exDetails?.sets.map((s, sIdx) => (
+                                    <span key={sIdx} className={`px-2 py-1 rounded text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-gray-300 text-cyan-800'}`}>
+                                      S{sIdx + 1}: <strong>{s.reps || 0}</strong> × <strong>{s.weight || 0}kg</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             )}
@@ -946,9 +1184,9 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* BOTTOM NAVIGATION */}
+      {/* FIXED BOTTOM NAVIGATION */}
       {!activeSession && (
-        <nav className={`fixed bottom-0 left-0 right-0 border-t p-2 flex justify-around z-10 ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-white border-gray-200 shadow-lg'}`}>
+        <nav className={`fixed bottom-0 left-0 right-0 border-t p-2 flex justify-around z-50 backdrop-blur-md ${isDark ? 'bg-neutral-950/90 border-neutral-800' : 'bg-white/90 border-gray-200 shadow-lg'}`}>
           <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center p-1 text-[10px] font-bold ${activeTab === 'history' ? accentText : textMuted}`}>
             <CalendarIcon className="h-4 w-4 mb-0.5" />
             <span>Historia</span>
