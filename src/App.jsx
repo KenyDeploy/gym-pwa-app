@@ -16,14 +16,14 @@ import {
   Copy,
   Bell,
   BarChart3,
-  Target,
   ArrowRight,
   ArrowLeft,
   Trophy,
   History,
   Zap,
   Activity,
-  UserCheck
+  UserCheck,
+  Flame
 } from 'lucide-react';
 
 export default function WorkoutApp() {
@@ -368,7 +368,22 @@ export default function WorkoutApp() {
   };
 
   const deleteWorkoutHistory = (id) => {
+    const removed = workoutHistory.find(item => item.id === id);
+    if (!removed) return;
+
+    const hasAnotherWorkoutThatDay = workoutHistory.some(
+      item => item.id !== id && item.date === removed.date
+    );
+
     setWorkoutHistory(prev => prev.filter(item => item.id !== id));
+
+    if (!hasAnotherWorkoutThatDay) {
+      setMarkedDays(prev => prev.filter(day => day !== removed.date));
+    }
+
+    if (removed.date === selectedHistoryDate && !hasAnotherWorkoutThatDay) {
+      setSelectedHistoryDate(null);
+    }
   };
 
   // BODY STATS
@@ -402,11 +417,68 @@ export default function WorkoutApp() {
   };
 
   const toggleDayMark = (dateStr) => {
-    if (markedDays.includes(dateStr)) {
-      setMarkedDays(prev => prev.filter(d => d !== dateStr));
-    } else {
-      setMarkedDays(prev => [...prev, dateStr]);
+    setMarkedDays(prev =>
+      prev.includes(dateStr)
+        ? prev.filter(d => d !== dateStr)
+        : [...prev, dateStr]
+    );
+  };
+
+  const fillFromPreviousWorkout = (exIdx) => {
+    const previous = getPreviousExData(
+      activeSession?.exercises[exIdx]?.id,
+      activeSession?.exercises[exIdx]?.name
+    );
+
+    if (!previous) return;
+
+    setActiveSession(prev => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, idx) =>
+        idx === exIdx
+          ? {
+              ...exercise,
+              sets: previous.sets.map(set => ({
+                reps: set.reps || '',
+                weight: set.weight || '',
+                done: false
+              }))
+            }
+          : exercise
+      )
+    }));
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedHistoryDate(getLocalDateString());
+  };
+
+  const getWorkoutCountForMonth = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    return workoutHistory.filter(w => {
+      const d = new Date(`${w.date}T00:00:00`);
+      return d.getFullYear() === year && d.getMonth() === month;
+    }).length;
+  };
+
+  const getCurrentStreak = () => {
+    const days = new Set(
+      workoutHistory.map(w => w.date)
+    );
+    let streak = 0;
+    const cursor = new Date();
+
+    while (days.has(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
+    )) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
     }
+
+    return streak;
   };
 
   const downloadCreatineReminder = () => {
@@ -604,7 +676,7 @@ END:VCALENDAR`;
       </header>
 
       {/* MAIN */}
-      <main className="flex-1 p-4 max-w-lg w-full mx-auto pb-28">
+      <main className="flex-1 p-4 sm:p-5 max-w-lg w-full mx-auto pb-32">
 
         {/* ACTIVE WORKOUT - CLEAN MOBILE UX */}
         {activeSession ? (
@@ -650,37 +722,40 @@ END:VCALENDAR`;
               </div>
             </div>
 
-            {/* LAST WORKOUT / TODAY'S TARGET */}
-            <div className={`rounded-3xl border p-4 ${isDark ? 'bg-violet-950/20 border-violet-500/20' : 'bg-indigo-50/70 border-indigo-100'}`}>
-              <div className="flex items-center gap-2">
-                <div className={`p-2 rounded-xl ${isDark ? 'bg-violet-500/10' : 'bg-white'}`}>
-                  <Target className={`h-4 w-4 ${accentText}`} />
+            {/* LAST RESULT — QUICK ACTION */}
+            <div className={`rounded-3xl border p-4 ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${accentText}`}>
+                    Ostatni wynik
+                  </div>
+                  {prevExData ? (
+                    <div className={`mt-1 text-sm font-black truncate ${textMuted}`}>
+                      {prevExData.sets
+                        .map(s => `${s.reps || 0} × ${s.weight || 0} kg`)
+                        .join('  ·  ')}
+                    </div>
+                  ) : (
+                    <div className={`mt-1 text-xs font-semibold ${textMuted}`}>
+                      Brak poprzedniego zapisu — zacznij od bazowych serii.
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${accentText}`}>Progres</div>
-                  <div className="text-sm font-black">Cel na dzisiaj</div>
-                </div>
-              </div>
 
-              {prevExData ? (
-                <div className="mt-3 space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {prevExData.sets.map((set, idx) => (
-                      <div key={idx} className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold font-mono ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
-                        S{idx + 1}: {set.reps || 0} × {set.weight || 0} kg
-                      </div>
-                    ))}
-                  </div>
-                  <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark ? 'bg-violet-500/10' : 'bg-white shadow-sm'}`}>
-                    <span className={`text-xs font-bold ${textMuted}`}>🎯 Spróbuj przebić poprzedni wynik</span>
-                    <span className={`text-xs font-black whitespace-nowrap ${accentText}`}>+1 powt. / +2,5 kg</span>
-                  </div>
-                </div>
-              ) : (
-                <p className={`text-xs font-medium mt-3 ${textMuted}`}>
-                  Pierwszy zapis tego ćwiczenia. Ustal bazowy ciężar i liczbę powtórzeń.
-                </p>
-              )}
+                {prevExData && (
+                  <button
+                    onClick={() => fillFromPreviousWorkout(activeExIdx)}
+                    className={`shrink-0 px-3 py-2 rounded-xl text-[11px] font-black border transition-all active:scale-95 ${
+                      isDark
+                        ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                        : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                    }`}
+                    title="Przenieś ostatnie serie do bieżącego treningu"
+                  >
+                    Użyj ostatniego
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* ACTIVE EXERCISE CARD */}
@@ -837,59 +912,52 @@ END:VCALENDAR`;
             {activeTab === 'start' && (
               <div className="space-y-6">
 
-                <div>
-                  <h2 className={`text-xs font-bold uppercase tracking-wider ${textMuted} mb-3`}>
-                    Ostatni trening
-                  </h2>
-
-                  {workoutHistory.length > 0 ? (
-                    <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-sm">
-                          {workoutHistory[0].planName}
-                        </span>
-                        <span className={`text-xs ${textMuted}`}>
-                          {formatDate(workoutHistory[0].date)}
-                        </span>
+                <div className="space-y-3">
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${accentText}`}>
+                        Dashboard
                       </div>
+                      <h2 className="text-2xl font-black tracking-tight mt-1">
+                        Gotowy na kolejny trening?
+                      </h2>
+                    </div>
+                    <div className={`px-2.5 py-1.5 rounded-full text-[10px] font-black ${isDark ? 'bg-orange-500/10 text-orange-300' : 'bg-orange-50 text-orange-600'}`}>
+                      <span className="inline-flex items-center gap-1">
+                        <Flame className="h-3 w-3" /> {getCurrentStreak()} dni
+                      </span>
+                    </div>
+                  </div>
 
-                      <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-200 dark:border-neutral-800">
-
-                        <div>
-                          <div className={`text-[10px] ${textMuted}`}>
-                            Czas
-                          </div>
-                          <div className="font-bold text-xs">
-                            {workoutHistory[0].duration}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className={`text-[10px] ${textMuted}`}>
-                            Powtórzenia
-                          </div>
-                          <div className="font-bold text-xs">
-                            {workoutHistory[0].totalReps}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className={`text-[10px] ${textMuted}`}>
-                            Tonaż
-                          </div>
-                          <div className={`font-bold text-xs ${accentText}`}>
-                            {workoutHistory[0].totalWeight} kg
-                          </div>
-                        </div>
-
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
+                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>W tym miesiącu</div>
+                      <div className="text-xl font-black mt-1">{getWorkoutCountForMonth()}</div>
+                    </div>
+                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
+                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>Łącznie</div>
+                      <div className="text-xl font-black mt-1">{workoutHistory.length}</div>
+                    </div>
+                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
+                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>Ostatni</div>
+                      <div className={`text-sm font-black mt-2 truncate ${accentText}`}>
+                        {workoutHistory[0] ? formatDate(workoutHistory[0].date) : '—'}
                       </div>
                     </div>
-                  ) : (
-                    <div className={`p-4 rounded-xl border text-center ${bgCard}`}>
-                      <p className={`text-xs ${textMuted}`}>
-                        Brak zarejestrowanych treningów. Czas na pierwszy trening!
-                      </p>
+                  </div>
+
+                  {workoutHistory.length > 0 && (
+                    <div className={`p-4 rounded-2xl border ${bgCard}`}>
+                      <div className="flex justify-between items-center gap-3">
+                        <div className="min-w-0">
+                          <div className={`text-[9px] uppercase font-black ${textMuted}`}>Ostatni trening</div>
+                          <div className="font-black text-sm mt-1 truncate">{workoutHistory[0].planName}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className={`text-xs font-black ${accentText}`}>{workoutHistory[0].totalWeight} kg</div>
+                          <div className={`text-[10px] ${textMuted}`}>{workoutHistory[0].totalReps} powt.</div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -910,12 +978,28 @@ END:VCALENDAR`;
               <div className="space-y-4">
 
                 <div>
-                  <h2 className="text-lg font-bold">
-                    Kalendarz i Historia
-                  </h2>
-                  <p className={`text-xs ${textMuted}`}>
-                    Kliknij dzień w kalendarzu, aby zobaczyć podsumowanie treningu.
-                  </p>
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${accentText}`}>Historia</div>
+                      <h2 className="text-2xl font-black tracking-tight mt-1">Kalendarz treningów</h2>
+                    </div>
+                    <button
+                      onClick={goToToday}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black border transition-all ${
+                        isDark
+                          ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      Dzisiaj
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`h-2 w-2 rounded-full ${isDark ? 'bg-violet-500' : 'bg-indigo-600'}`} />
+                    <span className={`text-xs font-semibold ${textMuted}`}>
+                      Kliknij dzień, aby zaznaczyć / odznaczyć trening i zobaczyć szczegóły.
+                    </span>
+                  </div>
                 </div>
 
                 <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
@@ -1017,28 +1101,34 @@ END:VCALENDAR`;
                         '0'
                       )}`;
 
+                      const hasWorkout = workoutHistory.some(w => w.date === dateStr);
                       const isMarked = markedDays.includes(dateStr);
-                      const isSelected =
-                        selectedHistoryDate === dateStr;
+                      const isSelected = selectedHistoryDate === dateStr;
+                      const isToday = dateStr === getLocalDateString();
 
                       return (
                         <button
                           key={dayNum}
                           onClick={() => {
-                            if (!isMarked) {
-                              toggleDayMark(dateStr);
-                            }
+                            toggleDayMark(dateStr);
                             setSelectedHistoryDate(dateStr);
                           }}
-                          className={`h-9 rounded-lg font-bold text-xs flex items-center justify-center transition-all ${
+                          aria-pressed={isMarked}
+                          className={`relative h-11 rounded-2xl font-black text-xs flex flex-col items-center justify-center transition-all active:scale-95 ${
                             isMarked
-                              ? `${accentBg} font-black`
-                              : isSelected
-                                ? 'border-2 border-violet-500'
-                                : isDark
-                                  ? 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800'
-                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
+                              ? `${accentBg} shadow-md shadow-violet-500/15`
+                              : isDark
+                                ? 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800 border border-neutral-800'
+                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                          } ${isSelected ? 'ring-2 ring-violet-400 ring-offset-2 ' + (isDark ? 'ring-offset-neutral-900' : 'ring-offset-white') : ''}`}
+                        >
+                          <span>{dayNum}</span>
+                          {isToday && !isMarked && (
+                            <span className={`absolute bottom-1 h-1 w-1 rounded-full ${isDark ? 'bg-violet-400' : 'bg-indigo-600'}`} />
+                          )}
+                          {isMarked && hasWorkout && (
+                            <span className="absolute bottom-1 h-1 w-1 rounded-full bg-white/90" />
+                          )}
                         >
                           {dayNum}
                         </button>
@@ -1048,7 +1138,7 @@ END:VCALENDAR`;
                 </div>
 
                 {selectedHistoryDate && (
-                  <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
+                  <div className={`border rounded-3xl p-4 space-y-4 ${bgCard} shadow-sm`}>
 
                     <div className="flex justify-between items-center border-b pb-2 dark:border-neutral-800 border-slate-200">
 
@@ -2096,7 +2186,7 @@ END:VCALENDAR`;
 
       {/* BOTTOM NAVIGATION */}
       {!activeSession && !showSplash && (
-        <nav className={`fixed bottom-0 left-0 right-0 border-t p-2 flex justify-around z-40 backdrop-blur-md ${
+        <nav className={`fixed bottom-0 left-0 right-0 border-t px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around z-40 backdrop-blur-xl ${
           isDark
             ? 'bg-neutral-950/90 border-neutral-800'
             : 'bg-white/90 border-slate-200 shadow-lg'
@@ -2104,9 +2194,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'history'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
@@ -2116,9 +2206,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('stats')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'stats'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
@@ -2128,9 +2218,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('plans')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'plans'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
@@ -2140,9 +2230,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('start')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'start'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
@@ -2152,9 +2242,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('exercises')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'exercises'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
@@ -2164,9 +2254,9 @@ END:VCALENDAR`;
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex flex-col items-center p-1 text-[10px] font-bold ${
+            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
               activeTab === 'settings'
-                ? accentText
+                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
                 : textMuted
             }`}
           >
