@@ -70,7 +70,6 @@ export default function WorkoutApp() {
   // UI STATES
   const [activeTab, setActiveTab] = useState('start');
   const [statsSubTab, setStatsSubTab] = useState('records'); // 'records' | 'body' | 'history'
-  const [selectedBodyPart, setSelectedBodyPart] = useState('arm');
   const [newExName, setNewExName] = useState('');
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
@@ -103,7 +102,7 @@ export default function WorkoutApp() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
-    }, 2500);
+    }, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -115,7 +114,7 @@ export default function WorkoutApp() {
   useEffect(() => { localStorage.setItem('pm_marked_days', JSON.stringify(markedDays)); }, [markedDays]);
   useEffect(() => { localStorage.setItem('pm_body_stats', JSON.stringify(bodyStats)); }, [bodyStats]);
 
-  // OPTIMIZED TIMER
+  // TIMER
   useEffect(() => {
     let interval = null;
     if (activeSession) {
@@ -165,7 +164,6 @@ export default function WorkoutApp() {
     setActiveSession(updated);
   };
 
-  // USUWANIE KONKRETNEJ SERII
   const deleteSpecificSet = (exIdx, setIdx) => {
     const updated = { ...activeSession };
     if (updated.exercises[exIdx].sets.length > 1) {
@@ -235,7 +233,7 @@ export default function WorkoutApp() {
     setWorkoutHistory(prev => prev.filter(item => item.id !== id));
   };
 
-  // ZAPISYWANIE POMIARÓW Z HISTORIĄ
+  // ZAPISYWANIE POMIARÓW
   const saveBodyStats = (e) => {
     e.preventDefault();
     if (!newWeight && !newArm && !newWaist && !newChest && !newThigh) return;
@@ -289,7 +287,6 @@ END:VCALENDAR`;
     document.body.removeChild(link);
   };
 
-  // INDIVIDUAL PREVIOUS DATA LOGIC
   const getPreviousExData = (exId, exName) => {
     for (let w of workoutHistory) {
       const found = w.exercises.find(e => (e.id && e.id === exId) || e.name === exName);
@@ -300,23 +297,21 @@ END:VCALENDAR`;
     return null;
   };
 
-  // CALCULATIONS FOR ACTIVE EXERCISE
   const currentEx = activeSession?.exercises[activeExIdx];
   const prevExData = currentEx ? getPreviousExData(currentEx.id, currentEx.name) : null;
 
   const currentExReps = currentEx?.sets.reduce((acc, s) => acc + (parseInt(s.reps) || 0), 0) || 0;
   const currentExWeight = currentEx?.sets.reduce((acc, s) => acc + ((parseInt(s.reps) || 0) * (parseFloat(s.weight) || 0)), 0) || 0;
 
-  // THEME COLOR SCHEME
+  // THEME STYLING
   const isDark = theme === 'dark';
-  const bgMain = isDark ? 'bg-neutral-950 text-white' : 'bg-gray-100 text-gray-900';
-  const bgCard = isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200 shadow-sm';
-  const bgInput = isDark ? 'bg-neutral-950 border-neutral-800 text-white' : 'bg-gray-50 border-gray-300 text-gray-900';
-  const textMuted = isDark ? 'text-neutral-400' : 'text-gray-600';
+  const bgMain = isDark ? 'bg-neutral-950 text-white' : 'bg-slate-50 text-slate-900';
+  const bgCard = isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200 shadow-sm';
+  const bgInput = isDark ? 'bg-neutral-950 border-neutral-800 text-white' : 'bg-slate-100 border-slate-300 text-slate-900';
+  const textMuted = isDark ? 'text-neutral-400' : 'text-slate-500';
 
   const accentText = isDark ? 'text-cyan-400' : 'text-cyan-600';
-  const accentBg = isDark ? 'bg-cyan-400 text-black' : 'bg-cyan-600 text-white';
-  const accentBorder = isDark ? 'border-cyan-400' : 'border-cyan-600';
+  const accentBg = isDark ? 'bg-cyan-500 text-black hover:bg-cyan-400' : 'bg-cyan-600 text-white hover:bg-cyan-700';
 
   const historyForSelectedDate = selectedHistoryDate 
     ? workoutHistory.filter(w => w.date === selectedHistoryDate)
@@ -327,18 +322,17 @@ END:VCALENDAR`;
   return (
     <div className={`min-h-screen ${bgMain} flex flex-col font-sans transition-colors duration-200 relative`}>
       
-      {/* EKRAN POWITALNY */}
+      {/* SPLASH SCREEN */}
       {showSplash && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500 p-6 text-center">
           <img 
-            src="/logo.gif?v=1" 
+            src="/logo.png?v=1" 
             alt="Pakiernia U Matiego" 
             className="w-44 h-44 object-cover rounded-2xl mb-4 border-2 border-cyan-400 shadow-xl shadow-cyan-500/30" 
           />
           <h1 className="text-xl font-black uppercase tracking-widest text-cyan-400">
             PAKIERNIA U MATIEGO
           </h1>
-          
           <div className="w-64 max-w-xs mt-6 space-y-2">
             <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-wider text-neutral-400">
               <span className="flex items-center space-x-1">
@@ -355,7 +349,7 @@ END:VCALENDAR`;
       )}
 
       {/* HEADER */}
-      <header className={`p-4 border-b ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'} sticky top-0 z-10 flex justify-between items-center`}>
+      <header className={`p-4 border-b ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200'} sticky top-0 z-10 flex justify-between items-center`}>
         <div className="flex items-center space-x-2">
           <Dumbbell className={`h-6 w-6 ${accentText}`} />
           <h1 className="text-lg font-black tracking-wider uppercase">
@@ -363,7 +357,7 @@ END:VCALENDAR`;
           </h1>
         </div>
         {activeSession && (
-          <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-mono font-bold ${isDark ? 'bg-neutral-800 text-cyan-400 border border-cyan-500/30' : 'bg-gray-100 text-cyan-700 border border-cyan-200'}`}>
+          <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold ${isDark ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'}`}>
             <Timer className="h-3.5 w-3.5" />
             <span>{formatTime(timerSeconds)}</span>
           </div>
@@ -373,73 +367,71 @@ END:VCALENDAR`;
       {/* MAIN CONTENT */}
       <main className="flex-1 p-4 max-w-lg w-full mx-auto pb-28">
         
-        {/* ACTIVE WORKOUT MODE */}
+        {/* ACTIVE WORKOUT MODE (NOWOCZESNY UX MEGAMODE) */}
         {activeSession ? (
           <div className="space-y-4">
             
-            {/* POPRAWIONA NAWIGACJA PO ĆWICZENIACH (BEZ UCINANIA TEKSTU) */}
-            <div className={`p-3 rounded-xl border ${bgCard} space-y-2`}>
+            {/* PRZEŁĄCZNIK ĆWICZEŃ */}
+            <div className={`p-3.5 rounded-2xl border ${bgCard} shadow-sm space-y-2.5`}>
               <div className="flex items-center justify-between text-xs font-bold">
                 <button 
                   disabled={activeExIdx === 0}
                   onClick={() => setActiveExIdx(prev => Math.max(0, prev - 1))}
-                  className="p-1.5 disabled:opacity-30 hover:bg-neutral-800/50 rounded-lg text-cyan-400 flex items-center space-x-1"
+                  className={`px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-800 text-cyan-400 hover:bg-neutral-700' : 'bg-slate-100 text-cyan-700 hover:bg-slate-200'}`}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   <span>Poprzednie</span>
                 </button>
 
-                <span className={`text-xs ${textMuted} font-mono`}>
-                  Ćwiczenie <strong className="text-cyan-400">{activeExIdx + 1}</strong> z {activeSession.exercises.length}
+                <span className={`text-xs font-mono font-bold ${textMuted}`}>
+                  Ćwiczenie <span className="text-cyan-500 font-black">{activeExIdx + 1}</span> z {activeSession.exercises.length}
                 </span>
 
                 <button 
                   disabled={activeExIdx === activeSession.exercises.length - 1}
                   onClick={() => setActiveExIdx(prev => Math.min(activeSession.exercises.length - 1, prev + 1))}
-                  className="p-1.5 disabled:opacity-30 hover:bg-neutral-800/50 rounded-lg text-cyan-400 flex items-center space-x-1"
+                  className={`px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-800 text-cyan-400 hover:bg-neutral-700' : 'bg-slate-100 text-cyan-700 hover:bg-slate-200'}`}
                 >
                   <span>Następne</span>
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* PASEK WSKAŹNIKOWY (DOTS) */}
+              {/* DEDYKOWANE WSKAŹNIKI KROKÓW (PILL INDICATORS) */}
               <div className="flex gap-1.5 justify-center pt-1">
                 {activeSession.exercises.map((_, idx) => (
                   <button
                     key={idx}
                     onClick={() => setActiveExIdx(idx)}
-                    className={`h-1.5 rounded-full transition-all ${
+                    className={`h-2 rounded-full transition-all ${
                       idx === activeExIdx 
-                        ? 'w-6 bg-cyan-400' 
-                        : isDark ? 'w-2 bg-neutral-800 hover:bg-neutral-700' : 'w-2 bg-gray-300'
+                        ? 'w-7 bg-cyan-500 shadow-sm' 
+                        : isDark ? 'w-2 bg-neutral-800' : 'w-2 bg-slate-200'
                     }`}
                   />
                 ))}
               </div>
             </div>
 
-            {/* TARGET / PREVIOUS PERFORMANCE CARD */}
-            <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-cyan-950/40 border-cyan-500/40 text-white' : 'bg-cyan-50 border-cyan-300 text-gray-900'}`}>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-1.5 font-bold text-xs">
-                  <Target className={`h-4 w-4 ${accentText}`} />
-                  <span className="uppercase tracking-wider">Cel i Wynik z poprzedniego treningu</span>
-                </div>
+            {/* CEL I WYNIK Z POPRZEDNIEGO TRENINGU */}
+            <div className={`p-4 rounded-2xl border ${isDark ? 'bg-cyan-950/30 border-cyan-500/30 text-white' : 'bg-cyan-50/80 border-cyan-200 text-slate-900'} space-y-2.5`}>
+              <div className="flex items-center space-x-2 font-bold text-xs uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                <Target className="h-4 w-4" />
+                <span>Cel i wynik z poprzedniego treningu</span>
               </div>
 
               {prevExData ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {prevExData.sets.map((s, idx) => (
-                      <div key={idx} className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${isDark ? 'bg-neutral-900 border-cyan-500/30 text-cyan-300' : 'bg-white border-cyan-200 text-cyan-900'}`}>
+                      <div key={idx} className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${isDark ? 'bg-neutral-900 border-cyan-500/40 text-cyan-300' : 'bg-white border-cyan-200 text-cyan-900 shadow-sm'}`}>
                         S{idx + 1}: {s.reps || 0} × {s.weight || 0} kg
                       </div>
                     ))}
                   </div>
-                  <div className={`text-xs font-bold p-2 rounded-lg flex items-center justify-between ${isDark ? 'bg-cyan-400/10 text-cyan-300' : 'bg-cyan-100 text-cyan-900'}`}>
+                  <div className={`text-xs font-bold p-2 rounded-xl flex items-center justify-between ${isDark ? 'bg-cyan-400/10 text-cyan-300' : 'bg-cyan-100/70 text-cyan-900'}`}>
                     <span>🎯 Dzisiejszy cel:</span>
-                    <span className="font-extrabold">+1 powtórzenie lub +2.5 kg!</span>
+                    <span className="font-black">+1 powtórzenie lub +2.5 kg!</span>
                   </div>
                 </div>
               ) : (
@@ -447,25 +439,23 @@ END:VCALENDAR`;
               )}
             </div>
 
-            {/* CURRENT EXERCISE CARD */}
-            <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
-              <div className="flex justify-between items-center">
-                <h2 className={`text-lg font-black ${accentText}`}>{currentEx?.name}</h2>
-              </div>
+            {/* GŁÓWNA KARTA AKTYWNEGO ĆWICZENIA */}
+            <div className={`border rounded-2xl p-4 space-y-4 ${bgCard}`}>
+              <h2 className={`text-xl font-black ${accentText} tracking-tight`}>{currentEx?.name}</h2>
 
-              {/* LIVE EXERCISE STATS */}
-              <div className={`grid grid-cols-2 gap-2 text-center py-2 border-y ${isDark ? 'border-neutral-800' : 'border-gray-200'}`}>
+              {/* PODSUMOWANIE SERII */}
+              <div className={`grid grid-cols-2 gap-2 text-center py-2.5 rounded-xl border ${isDark ? 'bg-neutral-950/60 border-neutral-800' : 'bg-slate-50 border-slate-200'}`}>
                 <div>
-                  <div className={`text-xs ${textMuted}`}>Suma powtórzeń</div>
+                  <div className={`text-[11px] ${textMuted} uppercase font-semibold`}>Suma powtórzeń</div>
                   <div className="text-lg font-black">{currentExReps}</div>
                 </div>
                 <div>
-                  <div className={`text-xs ${textMuted}`}>Suma ciężaru</div>
+                  <div className={`text-[11px] ${textMuted} uppercase font-semibold`}>Suma ciężaru</div>
                   <div className={`text-lg font-black ${accentText}`}>{currentExWeight} kg</div>
                 </div>
               </div>
 
-              {/* TABLE HEADERS */}
+              {/* NAGŁÓWKI TABELI */}
               <div className={`grid grid-cols-12 gap-2 text-xs font-bold ${textMuted} px-1 text-center`}>
                 <div className="col-span-1">#</div>
                 <div className="col-span-4">Powtórzenia</div>
@@ -473,17 +463,17 @@ END:VCALENDAR`;
                 <div className="col-span-3">Akcje</div>
               </div>
 
-              {/* SET ROWS WITH NUMERIC KEYBOARD & DELETE OPTION */}
+              {/* WIERSZE SERII */}
               {currentEx?.sets.map((set, sIdx) => (
                 <div key={sIdx} className="grid grid-cols-12 gap-2 items-center">
-                  <span className={`col-span-1 font-bold text-xs text-center ${textMuted}`}>{sIdx + 1}</span>
+                  <span className={`col-span-1 font-black text-xs text-center ${textMuted}`}>{sIdx + 1}</span>
                   <input 
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
                     value={set.reps}
                     onChange={(e) => updateSet(activeExIdx, sIdx, 'reps', e.target.value)}
-                    className={`col-span-4 border rounded-lg p-2 text-center font-bold text-sm ${bgInput}`}
+                    className={`col-span-4 border rounded-xl p-2.5 text-center font-black text-base transition-all focus:border-cyan-500 focus:outline-none ${bgInput}`}
                   />
                   <input 
                     type="text"
@@ -491,13 +481,13 @@ END:VCALENDAR`;
                     placeholder="0"
                     value={set.weight}
                     onChange={(e) => updateSet(activeExIdx, sIdx, 'weight', e.target.value)}
-                    className={`col-span-4 border rounded-lg p-2 text-center font-bold text-sm ${bgInput}`}
+                    className={`col-span-4 border rounded-xl p-2.5 text-center font-black text-base transition-all focus:border-cyan-500 focus:outline-none ${bgInput}`}
                   />
                   <div className="col-span-3 flex justify-center items-center space-x-1">
                     <button 
                       onClick={() => copyPreviousSet(activeExIdx, sIdx)}
                       disabled={sIdx === 0}
-                      className="p-1.5 text-neutral-400 hover:text-cyan-400 disabled:opacity-20"
+                      className="p-2 text-slate-400 hover:text-cyan-500 disabled:opacity-20 transition-colors"
                       title="Kopiuj z poprzedniej serii"
                     >
                       <Copy className="h-4 w-4" />
@@ -505,7 +495,7 @@ END:VCALENDAR`;
                     <button 
                       onClick={() => deleteSpecificSet(activeExIdx, sIdx)}
                       disabled={currentEx.sets.length <= 1}
-                      className="p-1.5 text-neutral-400 hover:text-red-500 disabled:opacity-20"
+                      className="p-2 text-slate-400 hover:text-red-500 disabled:opacity-20 transition-colors"
                       title="Usuń tę serię"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -514,11 +504,11 @@ END:VCALENDAR`;
                 </div>
               ))}
 
-              {/* SET CONTROL BUTTONS */}
+              {/* PRZYCISKI SERII */}
               <div className="flex space-x-2 pt-2">
                 <button 
                   onClick={() => addSet(activeExIdx)}
-                  className={`flex-1 py-2.5 ${accentBg} font-bold rounded-lg text-xs flex items-center justify-center space-x-1 shadow-sm`}
+                  className={`flex-1 py-3 ${accentBg} font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-cyan-500/10 active:scale-[0.98] transition-all`}
                 >
                   <Plus className="h-4 w-4" />
                   <span>Dodaj serię</span>
@@ -526,48 +516,48 @@ END:VCALENDAR`;
                 <button 
                   onClick={() => removeSet(activeExIdx)}
                   disabled={currentEx?.sets.length <= 1}
-                  className={`px-3 py-2.5 border rounded-lg text-xs font-bold disabled:opacity-30 ${isDark ? 'border-neutral-800 text-neutral-400 hover:text-red-400' : 'border-gray-300 text-gray-700 hover:text-red-600'}`}
+                  className={`px-4 py-3 border rounded-xl text-xs font-bold transition-all disabled:opacity-30 ${isDark ? 'border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-900' : 'border-slate-300 text-slate-700 hover:text-red-600 hover:bg-red-50'}`}
                 >
                   Usuń ostatnią
                 </button>
               </div>
             </div>
 
-            {/* EXERCISE NAVIGATION BUTTONS */}
+            {/* NAWIGACJA DOLNA ĆWICZEŃ */}
             <div className="flex justify-between items-center space-x-2">
               <button
                 disabled={activeExIdx === 0}
                 onClick={() => setActiveExIdx(prev => Math.max(0, prev - 1))}
-                className={`flex-1 py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center space-x-1 disabled:opacity-30 ${isDark ? 'border-neutral-800 bg-neutral-900' : 'border-gray-300 bg-white'}`}
+                className={`flex-1 py-3 px-3 border rounded-2xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all disabled:opacity-30 ${isDark ? 'border-neutral-800 bg-neutral-900 text-neutral-300' : 'border-slate-300 bg-white text-slate-700 shadow-sm'}`}
               >
-                <ArrowLeft className="h-3.5 w-3.5" />
+                <ArrowLeft className="h-4 w-4" />
                 <span>Poprzednie</span>
               </button>
 
               <button
                 disabled={activeExIdx === activeSession.exercises.length - 1}
                 onClick={() => setActiveExIdx(prev => Math.min(activeSession.exercises.length - 1, prev + 1))}
-                className={`flex-1 py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center space-x-1 disabled:opacity-30 ${isDark ? 'border-neutral-800 bg-neutral-900' : 'border-gray-300 bg-white'}`}
+                className={`flex-1 py-3 px-3 border rounded-2xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all disabled:opacity-30 ${isDark ? 'border-neutral-800 bg-neutral-900 text-neutral-300' : 'border-slate-300 bg-white text-slate-700 shadow-sm'}`}
               >
                 <span>Następne</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
 
-            {/* CANCEL & FINISH BUTTONS */}
+            {/* PRZYCISKI AKCJI ZAKOŃCZENIA/ANULOWANIA */}
             <div className="flex justify-between items-center pt-2">
               <button 
                 onClick={() => setActiveSession(null)}
-                className="text-xs font-bold text-red-500 hover:underline"
+                className="text-xs font-bold text-red-500 hover:underline px-2 py-1"
               >
                 Anuluj trening
               </button>
               <button 
                 onClick={finishWorkout}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl text-sm flex items-center space-x-1.5 shadow-lg shadow-emerald-600/20"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 px-6 rounded-2xl text-xs flex items-center space-x-2 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
               >
                 <CheckCircle className="h-4 w-4" />
-                <span>Zakończ trening</span>
+                <span>ZAKOŃCZ TRENING</span>
               </button>
             </div>
 
@@ -577,8 +567,6 @@ END:VCALENDAR`;
             {/* TAB 1: START */}
             {activeTab === 'start' && (
               <div className="space-y-6">
-                
-                {/* LAST WORKOUT SUMMARY */}
                 <div>
                   <h2 className={`text-xs font-bold uppercase tracking-wider ${textMuted} mb-3`}>Ostatni trening</h2>
                   {workoutHistory.length > 0 ? (
@@ -587,7 +575,7 @@ END:VCALENDAR`;
                         <span className="font-bold text-sm">{workoutHistory[0].planName}</span>
                         <span className={`text-xs ${textMuted}`}>{workoutHistory[0].date}</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-gray-200 dark:border-neutral-800">
+                      <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-200 dark:border-neutral-800">
                         <div>
                           <div className={`text-[10px] ${textMuted}`}>Czas</div>
                           <div className="font-bold text-xs">{workoutHistory[0].duration}</div>
@@ -609,15 +597,13 @@ END:VCALENDAR`;
                   )}
                 </div>
 
-                {/* START WORKOUT BUTTON */}
                 <button 
                   onClick={() => setShowStartModal(true)}
-                  className={`w-full py-4 ${accentBg} font-black tracking-wider uppercase rounded-xl shadow-lg shadow-cyan-500/10 text-center transition-transform active:scale-95 flex items-center justify-center space-x-2 text-base`}
+                  className={`w-full py-4 ${accentBg} font-black tracking-wider uppercase rounded-2xl shadow-xl shadow-cyan-500/10 text-center transition-transform active:scale-95 flex items-center justify-center space-x-2 text-base`}
                 >
                   <Play className="h-5 w-5 fill-current" />
                   <span>ROZPOCZNIJ TRENING</span>
                 </button>
-
               </div>
             )}
 
@@ -629,23 +615,21 @@ END:VCALENDAR`;
                   <p className={`text-xs ${textMuted}`}>Kliknij dzień w kalendarzu, aby zobaczyć podsumowanie treningu.</p>
                 </div>
 
-                {/* CALENDAR */}
                 <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-sm">
                       {currentDate.toLocaleString('pl-PL', { month: 'long', year: 'numeric' }).toUpperCase()}
                     </h3>
                     <div className="flex space-x-1">
-                      <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className={`p-1.5 rounded-lg border ${isDark ? 'border-neutral-800 bg-neutral-950' : 'border-gray-300 bg-gray-50'}`}>
+                      <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className={`p-1.5 rounded-lg border ${isDark ? 'border-neutral-800 bg-neutral-950' : 'border-slate-300 bg-slate-50'}`}>
                         <ChevronLeft className="h-4 w-4" />
                       </button>
-                      <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className={`p-1.5 rounded-lg border ${isDark ? 'border-neutral-800 bg-neutral-950' : 'border-gray-300 bg-gray-50'}`}>
+                      <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className={`p-1.5 rounded-lg border ${isDark ? 'border-neutral-800 bg-neutral-950' : 'border-slate-300 bg-slate-50'}`}>
                         <ChevronRight className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
 
-                  {/* CALENDAR GRID */}
                   <div className={`grid grid-cols-7 gap-1 text-center font-bold text-xs ${textMuted}`}>
                     <div>Pn</div><div>Wt</div><div>Śr</div><div>Cz</div><div>Pt</div><div>So</div><div>Nd</div>
                   </div>
@@ -671,8 +655,8 @@ END:VCALENDAR`;
                             isMarked
                               ? `${accentBg} font-black`
                               : isSelected
-                              ? 'border-2 border-cyan-400'
-                              : isDark ? 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              ? 'border-2 border-cyan-500'
+                              : isDark ? 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}
                         >
                           {dayNum}
@@ -682,15 +666,12 @@ END:VCALENDAR`;
                   </div>
                 </div>
 
-                {/* ODNOWIONY WIDOK SZCZEGÓŁÓW DNIA */}
                 {selectedHistoryDate && (
                   <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
-                    <div className="flex justify-between items-center border-b pb-2 dark:border-neutral-800 border-gray-200">
-                      <div>
-                        <h3 className="font-bold text-sm">Trening z dnia {selectedHistoryDate}</h3>
-                      </div>
+                    <div className="flex justify-between items-center border-b pb-2 dark:border-neutral-800 border-slate-200">
+                      <h3 className="font-bold text-sm">Trening z dnia {selectedHistoryDate}</h3>
                       <button onClick={() => setSelectedHistoryDate(null)}>
-                        <X className="h-4 w-4 text-neutral-400" />
+                        <X className="h-4 w-4 text-slate-400" />
                       </button>
                     </div>
 
@@ -704,7 +685,7 @@ END:VCALENDAR`;
 
                           <button 
                             onClick={() => deleteWorkoutHistory(h.id)}
-                            className="absolute top-0 right-0 text-neutral-500 hover:text-red-500 p-1"
+                            className="absolute top-0 right-0 text-slate-400 hover:text-red-500 p-1"
                             title="Usuń trening z historii"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -712,16 +693,16 @@ END:VCALENDAR`;
                           
                           <div className="space-y-2 pt-1">
                             {h.exercises.map((e, idx) => (
-                              <div key={idx} className={`p-3 rounded-xl border text-xs space-y-1.5 ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                              <div key={idx} className={`p-3 rounded-xl border text-xs space-y-1.5 ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200'}`}>
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold text-xs">{e.name}</span>
-                                  <span className="text-[10px] text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full font-mono">
+                                  <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono">
                                     {e.sets.length} serie
                                   </span>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5 pt-1">
                                   {e.sets.map((s, sIdx) => (
-                                    <span key={sIdx} className={`px-2 py-1 rounded-md text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-gray-300 text-cyan-800'}`}>
+                                    <span key={sIdx} className={`px-2 py-1 rounded-md text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-slate-300 text-cyan-900'}`}>
                                       S{sIdx + 1}: <strong>{s.reps || 0}</strong> powt. × <strong>{s.weight || 0}</strong> kg
                                     </span>
                                   ))}
@@ -743,8 +724,8 @@ END:VCALENDAR`;
             {activeTab === 'stats' && (
               <div className="space-y-4">
                 
-                {/* SUB-TABS NAVIGATION */}
-                <div className={`p-1 rounded-xl border flex text-xs font-bold ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-gray-200 border-gray-300'}`}>
+                {/* SUB-TABS */}
+                <div className={`p-1 rounded-xl border flex text-xs font-bold ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-slate-200 border-slate-300'}`}>
                   <button 
                     onClick={() => setStatsSubTab('records')}
                     className={`flex-1 py-2 rounded-lg text-center transition-all ${statsSubTab === 'records' ? accentBg : textMuted}`}
@@ -765,11 +746,11 @@ END:VCALENDAR`;
                   </button>
                 </div>
 
-                {/* SUB-TAB 1: REKORDY ŻYCIOWE */}
+                {/* SUB-TAB 1: REKORDY */}
                 {statsSubTab === 'records' && (
                   <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
                     <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                      <Trophy className="h-4 w-4 text-amber-400" />
+                      <Trophy className="h-4 w-4 text-amber-500" />
                       <span>Rekordy Życiowe (Max Ciężar)</span>
                     </h3>
                     <div className="space-y-2">
@@ -792,7 +773,7 @@ END:VCALENDAR`;
                         });
 
                         return (
-                          <div key={ex.id} className="flex justify-between items-center text-xs py-1.5 border-b border-gray-100 dark:border-neutral-800 last:border-0">
+                          <div key={ex.id} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100 dark:border-neutral-800 last:border-0">
                             <span className="font-semibold">{ex.name}</span>
                             <span className={`font-bold font-mono ${maxWeight > 0 ? accentText : textMuted}`}>
                               {maxWeight > 0 ? `${maxWeight} kg (${bestReps} powt.)` : 'Brak danych'}
@@ -804,80 +785,85 @@ END:VCALENDAR`;
                   </div>
                 )}
 
-                {/* SUB-TAB 2: POMIARY FORMIE & NOWA SYLWETKA SVG */}
+                {/* SUB-TAB 2: POMIARY CIAŁA & WIDOCZNA ANATOMICZNA SYLWETKA */}
                 {statsSubTab === 'body' && (
                   <div className="space-y-4">
                     
-                    {/* WIZUALIZACJA SYLWETKI SVG & DANYCH */}
-                    <div className={`p-4 rounded-xl border space-y-4 ${bgCard}`}>
+                    <div className={`p-4 rounded-2xl border space-y-4 ${bgCard}`}>
                       <div className="flex justify-between items-center">
                         <h3 className="font-bold text-sm flex items-center space-x-1.5">
                           <Activity className={`h-4 w-4 ${accentText}`} />
                           <span>Anatomia Formy & Wyniki</span>
                         </h3>
-                        <span className={`text-[10px] font-mono ${textMuted}`}>Ostatnia zmiana: {latestStats.date || 'Brak'}</span>
+                        <span className={`text-[10px] font-mono ${textMuted}`}>Data: {latestStats.date || 'Brak'}</span>
                       </div>
 
-                      {/* POPRAWIONY WEKTOROWY SZKIELET SYLWETKI */}
-                      <div className="relative w-full h-64 bg-neutral-950/60 rounded-2xl border border-neutral-800 flex items-center justify-between p-4 overflow-hidden">
+                      {/* ANATOMICZNA SYLWETKA SVG CZŁOWIEKA Z DOSKONALE WIDOCZNYMI KONTURAMI W OBU MOTYWACH */}
+                      <div className={`relative w-full h-72 rounded-2xl border flex items-center justify-between p-4 overflow-hidden ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-100 border-slate-200'}`}>
                         
-                        {/* WEKTOR SVG */}
-                        <div className="w-1/2 h-full flex items-center justify-center">
-                          <svg viewBox="0 0 100 200" className="h-full w-auto text-neutral-700 stroke-current stroke-2 fill-neutral-900/80">
+                        {/* Wektor SVG Sylwetki Człowieka */}
+                        <div className="w-1/2 h-full flex items-center justify-center p-1">
+                          <svg viewBox="0 0 100 200" className={`h-full w-auto transition-colors ${isDark ? 'text-neutral-700 fill-neutral-800 stroke-cyan-400' : 'text-slate-300 fill-slate-200 stroke-slate-700'}`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             {/* Głowa */}
-                            <circle cx="50" cy="22" r="13" />
-                            {/* Szyja */}
-                            <path d="M46 35 H54 V42 H46 Z" />
-                            {/* Tułów / Klatka */}
-                            <path d="M28 42 L72 42 L62 110 L38 110 Z" />
-                            {/* Lewe Ramię */}
-                            <path d="M28 42 L14 80 L20 110" strokeLinecap="round" />
-                            {/* Prawe Ramię */}
-                            <path d="M72 42 L86 80 L80 110" strokeLinecap="round" />
-                            {/* Lewa Noga */}
-                            <path d="M40 110 L36 150 L38 192" strokeLinecap="round" />
-                            {/* Prawa Noga */}
-                            <path d="M60 110 L64 150 L62 192" strokeLinecap="round" />
+                            <circle cx="50" cy="20" r="11" />
+                            {/* Kaptury / Szyja */}
+                            <path d="M43 28 L57 28 L60 38 L40 38 Z" />
+                            {/* Klatka i Klatka piersiowa */}
+                            <path d="M26 38 Q50 34 74 38 L68 75 L32 75 Z" />
+                            {/* Biceps / Ramiona */}
+                            <path d="M26 38 Q18 55 16 76 Q20 80 25 74 L32 50 Z" />
+                            <path d="M74 38 Q82 55 84 76 Q80 80 75 74 L68 50 Z" />
+                            {/* Przedramiona */}
+                            <path d="M16 76 L12 108 L18 108 L25 74 Z" />
+                            <path d="M84 76 L88 108 L82 108 L75 74 Z" />
+                            {/* Pas / Brzuch */}
+                            <path d="M32 75 L68 75 L62 110 L38 110 Z" />
+                            {/* Uda / Nogi */}
+                            <path d="M38 110 L48 110 L46 155 L35 155 Z" />
+                            <path d="M62 110 L52 110 L54 155 L65 155 Z" />
+                            {/* Łydki */}
+                            <path d="M35 155 L45 155 L42 192 L37 192 Z" />
+                            <path d="M65 155 L55 155 L58 192 L63 192 Z" />
                           </svg>
                         </div>
 
-                        {/* ETYKIETY Z DANYMI */}
+                        {/* PANELE BADGE DANYCH */}
                         <div className="w-1/2 space-y-2">
-                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                             <span className={`text-xs ${textMuted}`}>Klatka</span>
-                            <span className="text-xs font-bold font-mono text-cyan-400">{latestStats.chest || 0} cm</span>
+                            <span className="text-xs font-bold font-mono text-cyan-600 dark:text-cyan-400">{latestStats.chest || 0} cm</span>
                           </div>
-                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                             <span className={`text-xs ${textMuted}`}>Ramię</span>
-                            <span className="text-xs font-bold font-mono text-cyan-400">{latestStats.arm || 0} cm</span>
+                            <span className="text-xs font-bold font-mono text-cyan-600 dark:text-cyan-400">{latestStats.arm || 0} cm</span>
                           </div>
-                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                             <span className={`text-xs ${textMuted}`}>Pas</span>
-                            <span className="text-xs font-bold font-mono text-cyan-400">{latestStats.waist || 0} cm</span>
+                            <span className="text-xs font-bold font-mono text-cyan-600 dark:text-cyan-400">{latestStats.waist || 0} cm</span>
                           </div>
-                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className={`p-2 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                             <span className={`text-xs ${textMuted}`}>Udo</span>
-                            <span className="text-xs font-bold font-mono text-cyan-400">{latestStats.thigh || 0} cm</span>
+                            <span className="text-xs font-bold font-mono text-cyan-600 dark:text-cyan-400">{latestStats.thigh || 0} cm</span>
                           </div>
                         </div>
                       </div>
 
                       {/* WAGA CIAŁA */}
-                      <div className={`p-3 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className={`p-3 rounded-xl border flex justify-between items-center ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-slate-100 border-slate-200'}`}>
                         <div className="flex items-center space-x-2">
                           <UserCheck className={`h-5 w-5 ${accentText}`} />
                           <div>
                             <div className="text-xs font-bold">Waga Ciała</div>
-                            <div className={`text-xs ${textMuted}`}>Ostatni pomiar</div>
+                            <div className={`text-[10px] ${textMuted}`}>Ostatni pomiar</div>
                           </div>
                         </div>
-                        <div className="text-xl font-black font-mono tracking-tight text-cyan-400">
-                          {latestStats.weight || 0} <span className="text-xs text-neutral-400 font-normal">kg</span>
+                        <div className="text-xl font-black font-mono tracking-tight text-cyan-600 dark:text-cyan-400">
+                          {latestStats.weight || 0} <span className="text-xs text-slate-400 font-normal">kg</span>
                         </div>
                       </div>
 
-                      {/* FORMULARZ DODAWANIA POMIARÓW */}
-                      <form onSubmit={saveBodyStats} className="space-y-3 pt-2 border-t border-neutral-800">
+                      {/* FORMULARZ ZAPISU POMIARU */}
+                      <form onSubmit={saveBodyStats} className="space-y-3 pt-2 border-t border-slate-200 dark:border-neutral-800">
                         <div className="text-xs font-bold">Dodaj nowy pomiar:</div>
                         <div className="grid grid-cols-3 gap-2">
                           <input 
@@ -886,7 +872,7 @@ END:VCALENDAR`;
                             placeholder="Waga (kg)" 
                             value={newWeight} 
                             onChange={(e) => setNewWeight(e.target.value)} 
-                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
                           />
                           <input 
                             type="text" 
@@ -894,7 +880,7 @@ END:VCALENDAR`;
                             placeholder="Ramię (cm)" 
                             value={newArm} 
                             onChange={(e) => setNewArm(e.target.value)} 
-                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
                           />
                           <input 
                             type="text" 
@@ -902,7 +888,7 @@ END:VCALENDAR`;
                             placeholder="Klatka (cm)" 
                             value={newChest} 
                             onChange={(e) => setNewChest(e.target.value)} 
-                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
                           />
                           <input 
                             type="text" 
@@ -910,7 +896,7 @@ END:VCALENDAR`;
                             placeholder="Pas (cm)" 
                             value={newWaist} 
                             onChange={(e) => setNewWaist(e.target.value)} 
-                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
                           />
                           <input 
                             type="text" 
@@ -918,33 +904,43 @@ END:VCALENDAR`;
                             placeholder="Udo (cm)" 
                             value={newThigh} 
                             onChange={(e) => setNewThigh(e.target.value)} 
-                            className={`p-2 rounded-lg border text-xs font-bold text-center ${bgInput}`}
+                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
                           />
                           <button 
                             type="submit" 
-                            className={`py-2 ${accentBg} font-bold rounded-lg text-xs transition-colors`}
+                            className={`py-2.5 ${accentBg} font-bold rounded-xl text-xs transition-colors`}
                           >
                             Zapisz
                           </button>
                         </div>
                       </form>
 
-                      {/* HISTORIA HISTORYCZNYCH POMIARÓW */}
-                      <div className="pt-3 border-t border-neutral-800 space-y-2">
-                        <div className="text-xs font-bold flex items-center space-x-1">
-                          <History className="h-3.5 w-3.5 text-cyan-400" />
-                          <span>Historia wpisów pomiarowych:</span>
+                      {/* PEŁNA HISTORIA POMIARÓW Z WIZUALIZACJĄ WSZYSTKICH 5 PARAMETRÓW */}
+                      <div className="pt-3 border-t border-slate-200 dark:border-neutral-800 space-y-2">
+                        <div className="text-xs font-bold flex items-center space-x-1.5">
+                          <History className="h-4 w-4 text-cyan-500" />
+                          <span>Pełna historia pomiarów (5 parametrów):</span>
                         </div>
-                        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                           {bodyStats.map(st => (
-                            <div key={st.id} className={`p-2 rounded-lg border text-[11px] font-mono flex justify-between items-center ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
-                              <span className={textMuted}>{st.date}</span>
-                              <div className="space-x-2">
-                                <span><b>{st.weight}</b>kg</span>
-                                <span className={textMuted}>|</span>
-                                <span>Pas: <b>{st.waist}</b>cm</span>
-                                <span className={textMuted}>|</span>
-                                <span>Arm: <b>{st.arm}</b>cm</span>
+                            <div key={st.id} className={`p-3 rounded-xl border space-y-1.5 ${isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-slate-50 border-slate-200'}`}>
+                              <div className="flex justify-between items-center text-xs font-bold">
+                                <span className={textMuted}>{st.date}</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-mono font-black">{st.weight} kg</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                  Ramię: <b>{st.arm}</b> cm
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                  Klatka: <b>{st.chest}</b> cm
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                  Pas: <b>{st.waist}</b> cm
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
+                                  Udo: <b>{st.thigh}</b> cm
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -956,7 +952,7 @@ END:VCALENDAR`;
                   </div>
                 )}
 
-                {/* SUB-TAB 3: SZCZEGÓŁOWA HISTORIA ĆWICZEŃ */}
+                {/* SUB-TAB 3: HISTORIA ĆWICZEŃ */}
                 {statsSubTab === 'history' && (
                   <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
                     <h3 className="font-bold text-sm flex items-center space-x-1.5">
@@ -967,7 +963,7 @@ END:VCALENDAR`;
                     <select 
                       onChange={(e) => setSelectedStatExId(e.target.value)}
                       value={selectedStatExId || ''}
-                      className={`w-full p-2.5 rounded-lg border text-xs font-bold ${bgInput}`}
+                      className={`w-full p-2.5 rounded-xl border text-xs font-bold ${bgInput}`}
                     >
                       <option value="">-- Wybierz ćwiczenie z bazy --</option>
                       {exerciseDb.map(ex => (
@@ -990,13 +986,13 @@ END:VCALENDAR`;
                           return exHistory.map((w, idx) => {
                             const exDetails = w.exercises.find(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name);
                             return (
-                              <div key={idx} className={`p-3 rounded-lg border space-y-1.5 text-xs ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                              <div key={idx} className={`p-3 rounded-xl border space-y-1.5 text-xs ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200'}`}>
                                 <div className="flex justify-between font-bold">
                                   <span>{w.date} ({w.planName})</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
                                   {exDetails?.sets.map((s, sIdx) => (
-                                    <span key={sIdx} className={`px-2 py-1 rounded text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-gray-300 text-cyan-800'}`}>
+                                    <span key={sIdx} className={`px-2 py-1 rounded text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-slate-300 text-cyan-900'}`}>
                                       S{sIdx + 1}: <strong>{s.reps || 0}</strong> × <strong>{s.weight || 0}kg</strong>
                                     </span>
                                   ))}
@@ -1019,7 +1015,7 @@ END:VCALENDAR`;
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-bold">Plany Treningowe</h2>
                   {!isCreatingPlan && (
-                    <button onClick={() => setIsCreatingPlan(true)} className={`px-3 py-2 ${accentBg} font-bold text-xs rounded-lg flex items-center space-x-1`}>
+                    <button onClick={() => setIsCreatingPlan(true)} className={`px-3 py-2 ${accentBg} font-bold text-xs rounded-xl flex items-center space-x-1`}>
                       <Plus className="h-3.5 w-3.5" />
                       <span>Dodaj plan</span>
                     </button>
@@ -1027,13 +1023,13 @@ END:VCALENDAR`;
                 </div>
 
                 {isCreatingPlan && (
-                  <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
+                  <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
                     <input 
                       type="text" 
                       placeholder="Nazwa planu (np. Push / Pull)"
                       value={newPlanName}
                       onChange={(e) => setNewPlanName(e.target.value)}
-                      className={`w-full p-2.5 rounded-lg border text-sm ${bgInput}`}
+                      className={`w-full p-2.5 rounded-xl border text-sm ${bgInput}`}
                     />
                     <div className="space-y-1 max-h-40 overflow-y-auto">
                       {exerciseDb.map(ex => (
@@ -1046,7 +1042,7 @@ END:VCALENDAR`;
                               setSelectedExForPlan([...selectedExForPlan, ex.id]);
                             }
                           }}
-                          className={`w-full text-left p-2 rounded text-xs flex justify-between items-center ${
+                          className={`w-full text-left p-2 rounded-lg text-xs flex justify-between items-center ${
                             selectedExForPlan.includes(ex.id) 
                               ? isDark ? 'bg-cyan-950 text-cyan-400 font-bold' : 'bg-cyan-50 text-cyan-700 font-bold'
                               : textMuted
@@ -1066,11 +1062,11 @@ END:VCALENDAR`;
                           setNewPlanName('');
                           setSelectedExForPlan([]);
                         }}
-                        className={`flex-1 py-2 ${accentBg} font-bold rounded-lg text-xs`}
+                        className={`flex-1 py-2.5 ${accentBg} font-bold rounded-xl text-xs`}
                       >
                         Zapisz Plan
                       </button>
-                      <button onClick={() => setIsCreatingPlan(false)} className={`px-4 py-2 border rounded-lg text-xs font-bold ${isDark ? 'border-neutral-800' : 'border-gray-300'}`}>
+                      <button onClick={() => setIsCreatingPlan(false)} className={`px-4 py-2.5 border rounded-xl text-xs font-bold ${isDark ? 'border-neutral-800' : 'border-slate-300'}`}>
                         Anuluj
                       </button>
                     </div>
@@ -1078,12 +1074,12 @@ END:VCALENDAR`;
                 )}
 
                 {plans.map(p => (
-                  <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${bgCard}`}>
+                  <div key={p.id} className={`p-4 rounded-2xl border flex justify-between items-center ${bgCard}`}>
                     <div>
                       <h3 className="font-bold text-sm">{p.name}</h3>
                       <p className={`text-xs ${textMuted} mt-0.5`}>{p.exerciseIds.length} ćwiczeń w zestawieniu</p>
                     </div>
-                    <button onClick={() => setPlans(plans.filter(item => item.id !== p.id))} className="text-neutral-400 hover:text-red-500">
+                    <button onClick={() => setPlans(plans.filter(item => item.id !== p.id))} className="text-slate-400 hover:text-red-500">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1101,7 +1097,7 @@ END:VCALENDAR`;
                     placeholder="Nazwa nowego ćwiczenia..."
                     value={newExName}
                     onChange={(e) => setNewExName(e.target.value)}
-                    className={`flex-1 p-2.5 rounded-lg border text-sm ${bgInput}`}
+                    className={`flex-1 p-2.5 rounded-xl border text-sm ${bgInput}`}
                   />
                   <button 
                     onClick={() => {
@@ -1109,17 +1105,17 @@ END:VCALENDAR`;
                       setExerciseDb([...exerciseDb, { id: Date.now().toString(), name: newExName, category: 'Ogólne' }]);
                       setNewExName('');
                     }}
-                    className={`px-4 ${accentBg} font-bold rounded-lg text-xs`}
+                    className={`px-4 ${accentBg} font-bold rounded-xl text-xs`}
                   >
                     Dodaj
                   </button>
                 </div>
 
-                <div className={`border rounded-xl divide-y ${bgCard} ${isDark ? 'divide-neutral-800' : 'divide-gray-200'}`}>
+                <div className={`border rounded-2xl divide-y ${bgCard} ${isDark ? 'divide-neutral-800' : 'divide-slate-200'}`}>
                   {exerciseDb.map(ex => (
                     <div key={ex.id} className="p-3.5 flex justify-between items-center text-xs font-semibold">
                       <span>{ex.name}</span>
-                      <button onClick={() => setExerciseDb(exerciseDb.filter(e => e.id !== ex.id))} className="text-neutral-400 hover:text-red-500">
+                      <button onClick={() => setExerciseDb(exerciseDb.filter(e => e.id !== ex.id))} className="text-slate-400 hover:text-red-500">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -1133,23 +1129,21 @@ END:VCALENDAR`;
               <div className="space-y-5">
                 <h2 className="text-lg font-bold">Ustawienia</h2>
 
-                {/* THEME TOGGLE */}
-                <div className={`p-4 rounded-xl border flex justify-between items-center ${bgCard}`}>
+                <div className={`p-4 rounded-2xl border flex justify-between items-center ${bgCard}`}>
                   <div>
                     <div className="text-sm font-bold">Motyw aplikacji</div>
                     <div className={`text-xs ${textMuted}`}>Aplikacja zapamięta Twój wybór.</div>
                   </div>
                   <button 
                     onClick={() => setTheme(isDark ? 'light' : 'dark')}
-                    className={`p-2.5 rounded-xl flex items-center space-x-2 text-xs font-bold border ${isDark ? 'bg-neutral-800 border-neutral-700 text-cyan-400' : 'bg-gray-100 border-gray-300 text-gray-800'}`}
+                    className={`p-2.5 rounded-xl flex items-center space-x-2 text-xs font-bold border ${isDark ? 'bg-neutral-800 border-neutral-700 text-cyan-400' : 'bg-slate-100 border-slate-300 text-slate-800'}`}
                   >
                     {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                     <span>{isDark ? 'Jasny' : 'Ciemny'}</span>
                   </button>
                 </div>
 
-                {/* CREATINE REMINDER */}
-                <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
+                <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
                   <div className={`flex items-center space-x-2 ${accentText}`}>
                     <Bell className="h-4 w-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Kreatyna o 9:00</span>
@@ -1162,11 +1156,11 @@ END:VCALENDAR`;
                       type="time" 
                       value={creatineTime}
                       onChange={(e) => setCreatineTime(e.target.value)}
-                      className={`p-2 rounded-lg border text-xs font-bold ${bgInput}`}
+                      className={`p-2.5 rounded-xl border text-xs font-bold ${bgInput}`}
                     />
                     <button 
                       onClick={downloadCreatineReminder}
-                      className={`flex-1 ${accentBg} font-bold rounded-lg text-xs py-2`}
+                      className={`flex-1 ${accentBg} font-bold rounded-xl text-xs py-2.5`}
                     >
                       Dodaj do Kalendarza iOS
                     </button>
@@ -1183,19 +1177,19 @@ END:VCALENDAR`;
       {/* START WORKOUT MODAL */}
       {showStartModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`border rounded-xl p-4 max-w-xs w-full space-y-3 ${bgCard}`}>
+          <div className={`border rounded-2xl p-4 max-w-xs w-full space-y-3 ${bgCard}`}>
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-sm">Wybierz plan treningowy</h3>
               <button onClick={() => setShowStartModal(false)}>
-                <X className="h-4 w-4 text-neutral-400" />
+                <X className="h-4 w-4 text-slate-400" />
               </button>
             </div>
             {plans.map(p => (
               <button
                 key={p.id}
                 onClick={() => startWorkout(p)}
-                className={`w-full text-left p-3 rounded-xl border font-bold text-xs flex justify-between items-center transition-all ${
-                  isDark ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/40' : 'bg-cyan-50 border-cyan-200 text-cyan-800 hover:bg-cyan-100'
+                className={`w-full text-left p-3.5 rounded-xl border font-bold text-xs flex justify-between items-center transition-all ${
+                  isDark ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/40' : 'bg-cyan-50 border-cyan-200 text-cyan-900 hover:bg-cyan-100'
                 }`}
               >
                 <span>{p.name}</span>
@@ -1209,7 +1203,7 @@ END:VCALENDAR`;
       {/* WORKOUT SUMMARY MODAL */}
       {summaryData && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`border rounded-xl p-5 max-w-sm w-full space-y-4 text-center ${bgCard}`}>
+          <div className={`border rounded-2xl p-5 max-w-sm w-full space-y-4 text-center ${bgCard}`}>
             <div className="flex justify-center">
               <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-full">
                 <CheckCircle className="h-8 w-8" />
@@ -1217,7 +1211,7 @@ END:VCALENDAR`;
             </div>
             <h3 className="font-black text-lg">Trening Ukończony!</h3>
             
-            <div className={`grid grid-cols-3 gap-2 py-3 border-y text-center ${isDark ? 'border-neutral-800' : 'border-gray-200'}`}>
+            <div className={`grid grid-cols-3 gap-2 py-3 border-y text-center ${isDark ? 'border-neutral-800' : 'border-slate-200'}`}>
               <div>
                 <div className={`text-[10px] ${textMuted}`}>Czas</div>
                 <div className="font-bold text-sm">{summaryData.duration}</div>
@@ -1242,9 +1236,9 @@ END:VCALENDAR`;
         </div>
       )}
 
-      {/* FIXED BOTTOM NAVIGATION */}
+      {/* DOLNA NAWIGACJA ZAKŁADEK */}
       {!activeSession && (
-        <nav className={`fixed bottom-0 left-0 right-0 border-t p-2 flex justify-around z-50 backdrop-blur-md ${isDark ? 'bg-neutral-950/90 border-neutral-800' : 'bg-white/90 border-gray-200 shadow-lg'}`}>
+        <nav className={`fixed bottom-0 left-0 right-0 border-t p-2 flex justify-around z-50 backdrop-blur-md ${isDark ? 'bg-neutral-950/90 border-neutral-800' : 'bg-white/90 border-slate-200 shadow-lg'}`}>
           <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center p-1 text-[10px] font-bold ${activeTab === 'history' ? accentText : textMuted}`}>
             <CalendarIcon className="h-4 w-4 mb-0.5" />
             <span>Historia</span>
