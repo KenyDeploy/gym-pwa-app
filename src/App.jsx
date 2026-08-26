@@ -16,13 +16,18 @@ import {
   Copy,
   Bell,
   BarChart3,
-  TrendingUp,
+  Target,
   ArrowRight,
   ArrowLeft,
-  Trophy
+  Trophy,
+  History,
+  Zap
 } from 'lucide-react';
 
 export default function WorkoutApp() {
+  // SPLASH SCREEN STATE
+  const [showSplash, setShowSplash] = useState(true);
+
   // PERSISTENT STATE
   const [theme, setTheme] = useState(() => localStorage.getItem('pm_theme') || 'dark');
   const [exerciseDb, setExerciseDb] = useState(() => {
@@ -58,6 +63,7 @@ export default function WorkoutApp() {
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [selectedExForPlan, setSelectedExForPlan] = useState([]);
+  const [selectedStatExId, setSelectedStatExId] = useState(null);
 
   // WORKOUT SESSION STATE
   const [activeSession, setActiveSession] = useState(null);
@@ -70,6 +76,14 @@ export default function WorkoutApp() {
   // SETTINGS & CREATINE
   const [creatineTime, setCreatineTime] = useState('09:00');
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  // SPLASH SCREEN TIMER (Ukrywa splash po 2.5 sekundach)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // SAVE TO LOCALSTORAGE
   useEffect(() => { localStorage.setItem('pm_theme', theme); }, [theme]);
@@ -96,7 +110,7 @@ export default function WorkoutApp() {
     return `${hrs > 0 ? hrs + ':' : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // WORKOUT LOGIC - CLEAN EMPTY SETS AT START
+  // WORKOUT LOGIC
   const startWorkout = (plan) => {
     const sessionExercises = plan.exerciseIds.map(id => {
       const ex = exerciseDb.find(e => e.id === id);
@@ -213,11 +227,11 @@ END:VCALENDAR`;
     document.body.removeChild(link);
   };
 
-  // HELPER: GET PREVIOUS PERFORMANCE FOR EXERCISE
-  const getPreviousExData = (exName) => {
+  // INDIVIDUAL PREVIOUS DATA LOGIC
+  const getPreviousExData = (exId, exName) => {
     for (let w of workoutHistory) {
-      const found = w.exercises.find(e => e.name === exName);
-      if (found && found.sets.some(s => s.reps && s.weight)) {
+      const found = w.exercises.find(e => (e.id && e.id === exId) || e.name === exName);
+      if (found && found.sets.some(s => parseFloat(s.weight) > 0 || parseInt(s.reps) > 0)) {
         return found;
       }
     }
@@ -226,7 +240,7 @@ END:VCALENDAR`;
 
   // CALCULATIONS FOR ACTIVE EXERCISE
   const currentEx = activeSession?.exercises[activeExIdx];
-  const prevExData = currentEx ? getPreviousExData(currentEx.name) : null;
+  const prevExData = currentEx ? getPreviousExData(currentEx.id, currentEx.name) : null;
 
   const currentExReps = currentEx?.sets.reduce((acc, s) => acc + (parseInt(s.reps) || 0), 0) || 0;
   const currentExWeight = currentEx?.sets.reduce((acc, s) => acc + ((parseInt(s.reps) || 0) * (parseFloat(s.weight) || 0)), 0) || 0;
@@ -246,12 +260,27 @@ END:VCALENDAR`;
     ? workoutHistory.filter(w => w.date === selectedHistoryDate)
     : [];
 
-  // STATS CALCULATIONS
-  const maxVolume = workoutHistory.length > 0 ? Math.max(...workoutHistory.map(w => w.totalWeight)) : 1;
-
   return (
-    <div className={`min-h-screen ${bgMain} flex flex-col font-sans transition-colors duration-200`}>
+    <div className={`min-h-screen ${bgMain} flex flex-col font-sans transition-colors duration-200 relative`}>
       
+      {/* EKRAN POWITALNY (SPLASH SCREEN Z GIF-EM) */}
+      {showSplash && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500">
+          <img 
+            src="/logo.gif" 
+            alt="Ładowanie..." 
+            className="w-48 h-48 object-cover rounded-2xl mb-4 border-2 border-cyan-400 shadow-xl shadow-cyan-500/30" 
+          />
+          <h1 className="text-xl font-black uppercase tracking-widest text-cyan-400">
+            PAKIERNIA U MATIEGO
+          </h1>
+          <p className="text-xs text-neutral-400 mt-2 tracking-widest uppercase font-mono flex items-center space-x-1">
+            <Zap className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+            <span>Ładowanie formy...</span>
+          </p>
+        </div>
+      )}
+
       {/* HEADER */}
       <header className={`p-4 border-b ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'} sticky top-0 z-10 flex justify-between items-center`}>
         <div className="flex items-center space-x-2">
@@ -292,28 +321,33 @@ END:VCALENDAR`;
               ))}
             </div>
 
-            {/* PREVIOUS WORKOUT & PROGRESS SUGGESTION CARD */}
-            {prevExData && (
-              <div className={`p-3 rounded-xl border space-y-2 ${isDark ? 'bg-cyan-950/30 border-cyan-500/30' : 'bg-cyan-50 border-cyan-200'}`}>
-                <div className="flex justify-between items-center text-xs font-bold">
-                  <span className={`flex items-center space-x-1 ${accentText}`}>
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    <span>Poprzedni wynik & Sugestia</span>
-                  </span>
-                  <span className={textMuted}>Ostatnio</span>
+            {/* TARGET / PREVIOUS PERFORMANCE CARD */}
+            <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-cyan-950/40 border-cyan-500/40 text-white' : 'bg-cyan-50 border-cyan-300 text-gray-900'}`}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-1.5 font-bold text-xs">
+                  <Target className={`h-4 w-4 ${accentText}`} />
+                  <span className="uppercase tracking-wider">Cel i Wynik z poprzedniego treningu</span>
                 </div>
-                <div className="flex flex-wrap gap-2 text-[11px]">
-                  {prevExData.sets.map((s, idx) => (
-                    <span key={idx} className={`px-2 py-0.5 rounded font-mono ${isDark ? 'bg-neutral-900 text-neutral-300' : 'bg-white text-gray-800 border'}`}>
-                      S{idx + 1}: {s.reps || 0} x {s.weight || 0}kg
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[11px] font-semibold text-emerald-500 pt-1 border-t border-cyan-500/20">
-                  💡 Cel na dziś: spróbuj dołożyć +1 powtórzenie lub +2.5 kg w pierwszej serii!
-                </p>
               </div>
-            )}
+
+              {prevExData ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {prevExData.sets.map((s, idx) => (
+                      <div key={idx} className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${isDark ? 'bg-neutral-900 border-cyan-500/30 text-cyan-300' : 'bg-white border-cyan-200 text-cyan-900'}`}>
+                        S{idx + 1}: {s.reps || 0} × {s.weight || 0} kg
+                      </div>
+                    ))}
+                  </div>
+                  <div className={`text-xs font-bold p-2 rounded-lg flex items-center justify-between ${isDark ? 'bg-cyan-400/10 text-cyan-300' : 'bg-cyan-100 text-cyan-900'}`}>
+                    <span>🎯 Dzisiejszy cel:</span>
+                    <span className="font-extrabold">+1 powtórzenie lub +2.5 kg!</span>
+                  </div>
+                </div>
+              ) : (
+                <p className={`text-xs font-medium ${textMuted}`}>Brak historii dla tego ćwiczenia. Zrób serie bazowe!</p>
+              )}
+            </div>
 
             {/* CURRENT EXERCISE CARD */}
             <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
@@ -555,7 +589,6 @@ END:VCALENDAR`;
                             <span className={`text-xs ${textMuted}`}>{h.duration} | Tonaż: {h.totalWeight} kg</span>
                           </div>
                           
-                          {/* EXERCISE BREAKDOWN WITH WEIGHTS & SETS */}
                           <div className="space-y-3 pt-1">
                             {h.exercises.map((e, idx) => (
                               <div key={idx} className={`p-2.5 rounded-lg border text-xs space-y-1.5 ${isDark ? 'bg-neutral-950/60 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
@@ -580,88 +613,103 @@ END:VCALENDAR`;
               </div>
             )}
 
-            {/* TAB 3: STATYSTYKI PROGRESU */}
+            {/* TAB 3: STATYSTYKI ĆWICZEŃ & REKORDY */}
             {activeTab === 'stats' && (
               <div className="space-y-4">
                 <div>
-                  <h2 className="text-lg font-bold">Statystyki Progresu</h2>
-                  <p className={`text-xs ${textMuted}`}>Śledź wzrost tonażu i swoje osiągnięcia.</p>
-                </div>
-
-                {/* OVERVIEW STATS */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className={`p-4 rounded-xl border ${bgCard}`}>
-                    <div className={`text-xs ${textMuted}`}>Łącznie treningów</div>
-                    <div className="text-2xl font-black mt-1">{workoutHistory.length}</div>
-                  </div>
-                  <div className={`p-4 rounded-xl border ${bgCard}`}>
-                    <div className={`text-xs ${textMuted}`}>Najwyższy tonaż</div>
-                    <div className={`text-2xl font-black mt-1 ${accentText}`}>
-                      {workoutHistory.length > 0 ? `${Math.max(...workoutHistory.map(w => w.totalWeight))} kg` : '0 kg'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* VOLUME PROGRESS CHART (BARS) */}
-                <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-                  <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                    <BarChart3 className={`h-4 w-4 ${accentText}`} />
-                    <span>Objętość treningowa (Tonaż w czasie)</span>
-                  </h3>
-
-                  {workoutHistory.length > 0 ? (
-                    <div className="space-y-2 pt-2">
-                      {workoutHistory.slice(0, 7).reverse().map((w, idx) => {
-                        const pct = Math.round((w.totalWeight / maxVolume) * 100);
-                        return (
-                          <div key={idx} className="space-y-1">
-                            <div className="flex justify-between text-[11px] font-medium">
-                              <span>{w.date} - {w.planName}</span>
-                              <span className={`font-bold ${accentText}`}>{w.totalWeight} kg</span>
-                            </div>
-                            <div className={`w-full h-3 rounded-full ${isDark ? 'bg-neutral-800' : 'bg-gray-200'} overflow-hidden`}>
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${accentBg}`}
-                                style={{ width: `${Math.max(pct, 5)}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className={`text-xs ${textMuted} text-center py-4`}>Brak danych do wykresu. Zrób kilka treningów!</p>
-                  )}
+                  <h2 className="text-lg font-bold">Statystyki i Rekordy (PR)</h2>
+                  <p className={`text-xs ${textMuted}`}>Sprawdź historię ciężarów dla każdego ćwiczenia osobno.</p>
                 </div>
 
                 {/* PERSONAL RECORDS (BEST WEIGHT PER EXERCISE) */}
                 <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
                   <h3 className="font-bold text-sm flex items-center space-x-1.5">
                     <Trophy className="h-4 w-4 text-amber-400" />
-                    <span>Rekordy w Ćwiczeniach (Max Ciężar)</span>
+                    <span>Rekordy Życiowe (Max Ciężar)</span>
                   </h3>
                   <div className="space-y-2">
                     {exerciseDb.map(ex => {
-                      let maxW = 0;
+                      let maxWeight = 0;
+                      let bestReps = 0;
+
                       workoutHistory.forEach(w => {
-                        const found = w.exercises.find(e => e.name === ex.name);
+                        const found = w.exercises.find(e => (e.id && e.id === ex.id) || e.name === ex.name);
                         if (found) {
                           found.sets.forEach(s => {
-                            const weight = parseFloat(s.weight) || 0;
-                            if (weight > maxW) maxW = weight;
+                            const wVal = parseFloat(s.weight) || 0;
+                            const rVal = parseInt(s.reps) || 0;
+                            if (wVal > maxWeight) {
+                              maxWeight = wVal;
+                              bestReps = rVal;
+                            }
                           });
                         }
                       });
+
                       return (
-                        <div key={ex.id} className="flex justify-between items-center text-xs py-1 border-b border-gray-100 dark:border-neutral-800 last:border-0">
+                        <div key={ex.id} className="flex justify-between items-center text-xs py-1.5 border-b border-gray-100 dark:border-neutral-800 last:border-0">
                           <span className="font-semibold">{ex.name}</span>
-                          <span className={`font-bold ${maxW > 0 ? accentText : textMuted}`}>
-                            {maxW > 0 ? `${maxW} kg` : 'Brak danych'}
+                          <span className={`font-bold font-mono ${maxWeight > 0 ? accentText : textMuted}`}>
+                            {maxWeight > 0 ? `${maxWeight} kg (${bestReps} powt.)` : 'Brak danych'}
                           </span>
                         </div>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* DETAILED EXERCISE HISTORY FINDER */}
+                <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
+                  <h3 className="font-bold text-sm flex items-center space-x-1.5">
+                    <History className={`h-4 w-4 ${accentText}`} />
+                    <span>Szczegółowa Historia Ćwiczenia</span>
+                  </h3>
+                  
+                  {/* EXERCISE SELECTOR */}
+                  <select 
+                    onChange={(e) => setSelectedStatExId(e.target.value)}
+                    value={selectedStatExId || ''}
+                    className={`w-full p-2.5 rounded-lg border text-xs font-bold ${bgInput}`}
+                  >
+                    <option value="">-- Wybierz ćwiczenie z bazy --</option>
+                    {exerciseDb.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}</option>
+                    ))}
+                  </select>
+
+                  {/* DISPLAY DRILL-DOWN HISTORY */}
+                  {selectedStatExId && (
+                    <div className="space-y-2 pt-2">
+                      {(() => {
+                        const targetEx = exerciseDb.find(e => e.id === selectedStatExId);
+                        const exHistory = workoutHistory.filter(w => 
+                          w.exercises.some(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name)
+                        );
+
+                        if (exHistory.length === 0) {
+                          return <p className={`text-xs ${textMuted} text-center py-2`}>Brak wykonanych treningów z tym ćwiczeniem.</p>;
+                        }
+
+                        return exHistory.map((w, idx) => {
+                          const exDetails = w.exercises.find(e => (e.id && e.id === selectedStatExId) || e.name === targetEx?.name);
+                          return (
+                            <div key={idx} className={`p-3 rounded-lg border space-y-1.5 text-xs ${isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+                              <div className="flex justify-between font-bold">
+                                <span>{w.date} ({w.planName})</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {exDetails?.sets.map((s, sIdx) => (
+                                  <span key={sIdx} className={`px-2 py-1 rounded text-[11px] font-mono border ${isDark ? 'bg-neutral-900 border-neutral-700 text-cyan-300' : 'bg-white border-gray-300 text-cyan-800'}`}>
+                                    S{sIdx + 1}: <strong>{s.reps || 0}</strong> × <strong>{s.weight || 0}kg</strong>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -737,7 +785,7 @@ END:VCALENDAR`;
                   <div key={p.id} className={`p-4 rounded-xl border flex justify-between items-center ${bgCard}`}>
                     <div>
                       <h3 className="font-bold text-sm">{p.name}</h3>
-                      <p className={`text-xs ${textMuted} mt-0.5`}>{p.exerciseIds.length} ćwiczeń w zestawie</p>
+                      <p className={`text-xs ${textMuted} mt-0.5`}>{p.exerciseIds.length} ćwiczeń w zestawieniu</p>
                     </div>
                     <button onClick={() => setPlans(plans.filter(item => item.id !== p.id))} className="text-neutral-400 hover:text-red-500">
                       <Trash2 className="h-4 w-4" />
