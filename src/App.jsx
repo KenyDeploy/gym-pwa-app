@@ -207,11 +207,11 @@ export default function WorkoutApp() {
       
       {/* NAGŁÓWEK */}
       <header className="bg-neutral-900 border-b border-red-950/60 p-4 sticky top-0 z-10 flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-          <Dumbbell className="h-7 w-7 text-red-600" />
-          <h1 className="text-xl font-black tracking-wider uppercase text-white">
-            Pakiernia<span className="text-red-600">u Matiego</span>
-          </h1>
+        <div className="flex items-center space-x-3">
+  <Dumbbell className="h-7 w-7 text-red-600" />
+  <h1 className="text-xl font-black tracking-wider uppercase text-white">
+    PAKIERNIA <span className="text-red-600">U MATIEGO</span>
+  </h1>
         </div>
 
         {/* PRZYCISK START TRENINGU */}
