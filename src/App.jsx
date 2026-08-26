@@ -205,9 +205,9 @@ export default function WorkoutApp() {
         id,
         name: ex ? ex.name : 'Ćwiczenie',
         sets: [
-          { reps: '', weight: '' },
-          { reps: '', weight: '' },
-          { reps: '', weight: '' }
+          { reps: '', weight: '', done: false },
+          { reps: '', weight: '', done: false },
+          { reps: '', weight: '', done: false }
         ]
       };
     });
@@ -228,7 +228,7 @@ export default function WorkoutApp() {
         idx === exIdx
           ? {
               ...exercise,
-              sets: [...exercise.sets, { reps: '', weight: '' }]
+              sets: [...exercise.sets, { reps: '', weight: '', done: false }]
             }
           : exercise
       )
@@ -300,8 +300,26 @@ export default function WorkoutApp() {
               ...exercise,
               sets: exercise.sets.map((set, i) =>
                 i === setIdx
-                  ? { ...exercise.sets[setIdx - 1] }
+                  ? { ...exercise.sets[setIdx - 1], done: false }
                   : set
+              )
+            }
+          : exercise
+      )
+    };
+
+    setActiveSession(updated);
+  };
+
+  const toggleSetDone = (exIdx, setIdx) => {
+    const updated = {
+      ...activeSession,
+      exercises: activeSession.exercises.map((exercise, idx) =>
+        idx === exIdx
+          ? {
+              ...exercise,
+              sets: exercise.sets.map((set, i) =>
+                i === setIdx ? { ...set, done: !set.done } : set
               )
             }
           : exercise
@@ -448,6 +466,10 @@ END:VCALENDAR`;
     ? getPreviousExData(currentEx.id, currentEx.name)
     : null;
 
+  const currentExCategory = currentEx
+    ? (exerciseDb.find(e => e.id === currentEx.id)?.category || 'Trening')
+    : 'Trening';
+
   const currentExReps =
     currentEx?.sets.reduce(
       (acc, s) => acc + (parseInt(s.reps) || 0),
@@ -584,315 +606,227 @@ END:VCALENDAR`;
       {/* MAIN */}
       <main className="flex-1 p-4 max-w-lg w-full mx-auto pb-28">
 
-        {/* ACTIVE WORKOUT */}
+        {/* ACTIVE WORKOUT - CLEAN MOBILE UX */}
         {activeSession ? (
           <div className="space-y-4">
 
-            <div className={`p-3.5 rounded-2xl border ${bgCard} shadow-sm space-y-2.5`}>
-              <div className="flex items-center justify-between text-xs font-bold">
-
-                <button
-                  disabled={activeExIdx === 0}
-                  onClick={() =>
-                    setActiveExIdx(prev => Math.max(0, prev - 1))
-                  }
-                  className={`px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all disabled:opacity-30 ${
-                    isDark
-                      ? 'bg-neutral-800 text-violet-400 hover:bg-neutral-700'
-                      : 'bg-slate-100 text-indigo-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  <span>Poprzednie</span>
-                </button>
-
-                <span className={`text-xs font-mono font-bold ${textMuted}`}>
-                  Ćwiczenie{' '}
-                  <span className={`${accentText} font-black`}>
-                    {activeExIdx + 1}
-                  </span>{' '}
-                  z {activeSession.exercises.length}
-                </span>
-
-                <button
-                  disabled={
-                    activeExIdx === activeSession.exercises.length - 1
-                  }
-                  onClick={() =>
-                    setActiveExIdx(prev =>
-                      Math.min(
-                        activeSession.exercises.length - 1,
-                        prev + 1
-                      )
-                    )
-                  }
-                  className={`px-3 py-1.5 rounded-xl flex items-center space-x-1 transition-all disabled:opacity-30 ${
-                    isDark
-                      ? 'bg-neutral-800 text-violet-400 hover:bg-neutral-700'
-                      : 'bg-slate-100 text-indigo-700 hover:bg-slate-200'
-                  }`}
-                >
-                  <span>Następne</span>
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-
+            {/* EXERCISE HEADER */}
+            <div className={`rounded-3xl border p-4 ${bgCard} shadow-sm`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${textMuted}`}>
+                    Ćwiczenie {String(activeExIdx + 1).padStart(2, '0')} / {String(activeSession.exercises.length).padStart(2, '0')}
+                  </div>
+                  <h2 className="text-2xl font-black tracking-tight mt-1">
+                    <span className={accentText}>{currentEx?.name}</span>
+                  </h2>
+                  <div className={`text-xs font-semibold mt-1 ${textMuted}`}>
+                    {currentExCategory}
+                  </div>
+                </div>
+                <div className={`shrink-0 px-3 py-2 rounded-2xl text-xs font-black ${isDark ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
+                  {currentExReps} powt.
+                </div>
               </div>
 
-              <div className="flex gap-1.5 justify-center pt-1">
-                {activeSession.exercises.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setActiveExIdx(idx)}
-                    className={`h-2 rounded-full transition-all ${
-                      idx === activeExIdx
-                        ? 'w-7 bg-violet-500 shadow-sm'
-                        : isDark
-                          ? 'w-2 bg-neutral-800'
-                          : 'w-2 bg-slate-200'
-                    }`}
-                  />
-                ))}
+              <div className="flex items-center justify-center gap-2 mt-4">
+                {activeSession.exercises.map((exercise, idx) => {
+                  const exerciseDone = exercise.sets.length > 0 && exercise.sets.every(set => set.done);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveExIdx(idx)}
+                      aria-label={`Ćwiczenie ${idx + 1}`}
+                      className={`h-2 rounded-full transition-all ${
+                        idx === activeExIdx
+                          ? 'w-9 bg-violet-500 shadow-md shadow-violet-500/30'
+                          : exerciseDone
+                            ? 'w-2 bg-emerald-500'
+                            : isDark ? 'w-2 bg-neutral-700' : 'w-2 bg-slate-300'
+                      }`}
+                    />
+                  );
+                })}
               </div>
             </div>
 
-            {/* PREVIOUS RESULT */}
-            <div className={`p-4 rounded-2xl border ${
-              isDark
-                ? 'bg-violet-950/30 border-violet-500/30 text-white'
-                : 'bg-violet-50/80 border-violet-200 text-slate-900'
-            } space-y-2.5`}>
-
-              <div className="flex items-center space-x-2 font-bold text-xs uppercase tracking-wider text-violet-500">
-                <Target className="h-4 w-4" />
-                <span>Cel i wynik z poprzedniego treningu</span>
+            {/* LAST WORKOUT / TODAY'S TARGET */}
+            <div className={`rounded-3xl border p-4 ${isDark ? 'bg-violet-950/20 border-violet-500/20' : 'bg-indigo-50/70 border-indigo-100'}`}>
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-xl ${isDark ? 'bg-violet-500/10' : 'bg-white'}`}>
+                  <Target className={`h-4 w-4 ${accentText}`} />
+                </div>
+                <div>
+                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${accentText}`}>Progres</div>
+                  <div className="text-sm font-black">Cel na dzisiaj</div>
+                </div>
               </div>
 
               {prevExData ? (
-                <div className="space-y-2">
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {prevExData.sets.map((s, idx) => (
-                      <div
-                        key={idx}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${
-                          isDark
-                            ? 'bg-neutral-900 border-violet-500/40 text-violet-300'
-                            : 'bg-white border-violet-200 text-violet-900 shadow-sm'
-                        }`}
-                      >
-                        S{idx + 1}: {s.reps || 0} × {s.weight || 0} kg
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {prevExData.sets.map((set, idx) => (
+                      <div key={idx} className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold font-mono ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700'}`}>
+                        S{idx + 1}: {set.reps || 0} × {set.weight || 0} kg
                       </div>
                     ))}
                   </div>
-
-                  <div className={`text-xs font-bold p-2 rounded-xl flex items-center justify-between ${
-                    isDark
-                      ? 'bg-violet-400/10 text-violet-300'
-                      : 'bg-violet-100/70 text-violet-900'
-                  }`}>
-                    <span>🎯 Dzisiejszy cel:</span>
-                    <span className="font-black">
-                      +1 powtórzenie lub +2.5 kg!
-                    </span>
+                  <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark ? 'bg-violet-500/10' : 'bg-white shadow-sm'}`}>
+                    <span className={`text-xs font-bold ${textMuted}`}>🎯 Spróbuj przebić poprzedni wynik</span>
+                    <span className={`text-xs font-black whitespace-nowrap ${accentText}`}>+1 powt. / +2,5 kg</span>
                   </div>
-
                 </div>
               ) : (
-                <p className={`text-xs font-medium ${textMuted}`}>
-                  Brak historii dla tego ćwiczenia. Zrób serie bazowe!
+                <p className={`text-xs font-medium mt-3 ${textMuted}`}>
+                  Pierwszy zapis tego ćwiczenia. Ustal bazowy ciężar i liczbę powtórzeń.
                 </p>
               )}
             </div>
 
-            {/* ACTIVE EXERCISE */}
-            <div className={`border rounded-2xl p-4 space-y-4 ${bgCard}`}>
-
-              <h2 className={`text-xl font-black ${accentText} tracking-tight`}>
-                {currentEx?.name}
-              </h2>
-
-              <div className={`grid grid-cols-2 gap-2 text-center py-2.5 rounded-xl border ${
-                isDark
-                  ? 'bg-neutral-950/60 border-neutral-800'
-                  : 'bg-slate-50 border-slate-200'
-              }`}>
+            {/* ACTIVE EXERCISE CARD */}
+            <div className={`rounded-3xl border p-4 ${bgCard} shadow-sm`}>
+              <div className="flex items-end justify-between mb-4">
                 <div>
-                  <div className={`text-[11px] ${textMuted} uppercase font-semibold`}>
-                    Suma powtórzeń
-                  </div>
-                  <div className="text-lg font-black">
-                    {currentExReps}
-                  </div>
+                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${textMuted}`}>Serie</div>
+                  <div className="text-lg font-black mt-0.5">Wpisz wynik każdej serii</div>
                 </div>
-
-                <div>
-                  <div className={`text-[11px] ${textMuted} uppercase font-semibold`}>
-                    Suma ciężaru
-                  </div>
-                  <div className={`text-lg font-black ${accentText}`}>
-                    {currentExWeight} kg
-                  </div>
+                <div className={`text-right ${textMuted}`}>
+                  <div className="text-[10px] uppercase font-bold">Tonaż</div>
+                  <div className={`text-sm font-black ${accentText}`}>{currentExWeight} kg</div>
                 </div>
               </div>
 
-              <div className={`grid grid-cols-12 gap-2 text-xs font-bold ${textMuted} px-1 text-center`}>
-                <div className="col-span-1">#</div>
-                <div className="col-span-4">Powtórzenia</div>
-                <div className="col-span-4">Ciężar (kg)</div>
-                <div className="col-span-3">Akcje</div>
-              </div>
+              <div className="space-y-2.5">
+                {currentEx?.sets.map((set, sIdx) => (
+                  <div
+                    key={sIdx}
+                    className={`rounded-2xl border p-2.5 transition-all ${
+                      set.done
+                        ? isDark ? 'bg-emerald-950/25 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'
+                        : isDark ? 'bg-neutral-950/60 border-neutral-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${set.done ? 'bg-emerald-500 text-white' : isDark ? 'bg-neutral-800 text-neutral-400' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                        {sIdx + 1}
+                      </div>
 
-              {currentEx?.sets.map((set, sIdx) => (
-                <div key={sIdx} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="flex-1 grid grid-cols-2 gap-2">
+                        <div>
+                          <label className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${textMuted}`}>Powtórzenia</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={set.reps}
+                            onChange={(e) => updateSet(activeExIdx, sIdx, 'reps', e.target.value)}
+                            className={`w-full border rounded-xl px-2.5 py-2.5 text-center font-black text-base focus:border-violet-500 focus:outline-none ${bgInput}`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${textMuted}`}>Ciężar (kg)</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={set.weight}
+                            onChange={(e) => updateSet(activeExIdx, sIdx, 'weight', e.target.value)}
+                            className={`w-full border rounded-xl px-2.5 py-2.5 text-center font-black text-base focus:border-violet-500 focus:outline-none ${bgInput}`}
+                          />
+                        </div>
+                      </div>
 
-                  <span className={`col-span-1 font-black text-xs text-center ${textMuted}`}>
-                    {sIdx + 1}
-                  </span>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          onClick={() => toggleSetDone(activeExIdx, sIdx)}
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${set.done ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : isDark ? 'bg-neutral-800 text-neutral-500 hover:text-emerald-400' : 'bg-white border border-slate-200 text-slate-400 hover:text-emerald-500'}`}
+                          title="Oznacz serię jako wykonaną"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                        </button>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => copyPreviousSet(activeExIdx, sIdx)}
+                            disabled={sIdx === 0}
+                            className={`w-4 h-5 flex items-center justify-center ${textMuted} hover:text-violet-500 disabled:opacity-20`}
+                            title="Kopiuj poprzednią serię"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteSpecificSet(activeExIdx, sIdx)}
+                            disabled={currentEx.sets.length <= 1}
+                            className={`w-4 h-5 flex items-center justify-center ${textMuted} hover:text-red-500 disabled:opacity-20`}
+                            title="Usuń serię"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={set.reps}
-                    onChange={(e) =>
-                      updateSet(
-                        activeExIdx,
-                        sIdx,
-                        'reps',
-                        e.target.value
-                      )
-                    }
-                    className={`col-span-4 border rounded-xl p-2.5 text-center font-black text-base transition-all focus:border-violet-500 focus:outline-none ${bgInput}`}
-                  />
-
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={set.weight}
-                    onChange={(e) =>
-                      updateSet(
-                        activeExIdx,
-                        sIdx,
-                        'weight',
-                        e.target.value
-                      )
-                    }
-                    className={`col-span-4 border rounded-xl p-2.5 text-center font-black text-base transition-all focus:border-violet-500 focus:outline-none ${bgInput}`}
-                  />
-
-                  <div className="col-span-3 flex justify-center items-center space-x-1">
-
-                    <button
-                      onClick={() =>
-                        copyPreviousSet(activeExIdx, sIdx)
-                      }
-                      disabled={sIdx === 0}
-                      className="p-2 text-slate-400 hover:text-violet-500 disabled:opacity-20 transition-colors"
-                      title="Kopiuj z poprzedniej serii"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        deleteSpecificSet(activeExIdx, sIdx)
-                      }
-                      disabled={currentEx.sets.length <= 1}
-                      className="p-2 text-slate-400 hover:text-red-500 disabled:opacity-20 transition-colors"
-                      title="Usuń tę serię"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-
+                    {set.done && (
+                      <div className="mt-2 pl-10 text-[10px] font-black text-emerald-500 uppercase tracking-wider">
+                        ✓ Seria wykonana
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-
-              <div className="flex space-x-2 pt-2">
-
-                <button
-                  onClick={() => addSet(activeExIdx)}
-                  className={`flex-1 py-3 ${accentBg} font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-violet-500/10 active:scale-[0.98] transition-all`}
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Dodaj serię</span>
-                </button>
-
-                <button
-                  onClick={() => removeSet(activeExIdx)}
-                  disabled={currentEx?.sets.length <= 1}
-                  className={`px-4 py-3 border rounded-xl text-xs font-bold transition-all disabled:opacity-30 ${
-                    isDark
-                      ? 'border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-900'
-                      : 'border-slate-300 text-slate-700 hover:text-red-600 hover:bg-red-50'
-                  }`}
-                >
-                  Usuń ostatnią
-                </button>
-
+                ))}
               </div>
-            </div>
-
-            {/* EXERCISE NAV */}
-            <div className="flex justify-between items-center space-x-2">
 
               <button
+                onClick={() => addSet(activeExIdx)}
+                className={`w-full mt-3 py-3 ${accentBg} font-black rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-violet-500/10 active:scale-[0.98] transition-all`}
+              >
+                <Plus className="h-4 w-4" />
+                <span>Dodaj serię</span>
+              </button>
+
+              {currentEx?.sets.length > 1 && (
+                <button
+                  onClick={() => removeSet(activeExIdx)}
+                  className={`w-full mt-2 py-2 text-[11px] font-bold ${textMuted} hover:text-red-500 transition-colors`}
+                >
+                  Usuń ostatnią serię
+                </button>
+              )}
+            </div>
+
+            {/* BOTTOM EXERCISE NAVIGATION */}
+            <div className="flex gap-2">
+              <button
                 disabled={activeExIdx === 0}
-                onClick={() =>
-                  setActiveExIdx(prev => Math.max(0, prev - 1))
-                }
-                className={`flex-1 py-3 px-3 border rounded-2xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all disabled:opacity-30 ${
-                  isDark
-                    ? 'border-neutral-800 bg-neutral-900 text-neutral-300'
-                    : 'border-slate-300 bg-white text-slate-700 shadow-sm'
-                }`}
+                onClick={() => setActiveExIdx(prev => Math.max(0, prev - 1))}
+                className={`flex-1 py-3.5 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span>Poprzednie</span>
               </button>
-
               <button
-                disabled={
-                  activeExIdx === activeSession.exercises.length - 1
-                }
-                onClick={() =>
-                  setActiveExIdx(prev =>
-                    Math.min(
-                      activeSession.exercises.length - 1,
-                      prev + 1
-                    )
-                  )
-                }
-                className={`flex-1 py-3 px-3 border rounded-2xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all disabled:opacity-30 ${
-                  isDark
-                    ? 'border-neutral-800 bg-neutral-900 text-neutral-300'
-                    : 'border-slate-300 bg-white text-slate-700 shadow-sm'
-                }`}
+                disabled={activeExIdx === activeSession.exercises.length - 1}
+                onClick={() => setActiveExIdx(prev => Math.min(activeSession.exercises.length - 1, prev + 1))}
+                className={`flex-1 py-3.5 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
               >
                 <span>Następne</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
-
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-
+            {/* FINISH */}
+            <div className="flex items-center justify-between gap-3 pt-1 pb-2">
               <button
                 onClick={() => setActiveSession(null)}
-                className="text-xs font-bold text-red-500 hover:underline px-2 py-1"
+                className="text-xs font-black text-red-500 px-2 py-2 hover:underline"
               >
                 Anuluj trening
               </button>
-
               <button
                 onClick={finishWorkout}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 px-6 rounded-2xl text-xs flex items-center space-x-2 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
+                className="flex-1 max-w-[230px] bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
               >
                 <CheckCircle className="h-4 w-4" />
                 <span>ZAKOŃCZ TRENING</span>
               </button>
-
             </div>
           </div>
 
