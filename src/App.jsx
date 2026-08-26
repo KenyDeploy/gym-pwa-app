@@ -210,7 +210,7 @@ export default function WorkoutApp() {
         <div className="flex items-center space-x-2">
           <Dumbbell className="h-7 w-7 text-red-600" />
           <h1 className="text-xl font-black tracking-wider uppercase text-white">
-            FIT<span className="text-red-600">FORGE</span>
+            Pakiernia<span className="text-red-600">u Matiego</span>
           </h1>
         </div>
 
