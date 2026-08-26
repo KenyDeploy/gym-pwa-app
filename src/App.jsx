@@ -23,7 +23,13 @@ import {
   Zap,
   Activity,
   UserCheck,
-  Flame
+  Flame,
+  RotateCcw,
+  Pause,
+  SkipForward,
+  Award,
+  Gauge,
+  PlusCircle
 } from 'lucide-react';
 
 export default function WorkoutApp() {
@@ -101,6 +107,9 @@ export default function WorkoutApp() {
   const [activeExIdx, setActiveExIdx] = useState(0);
   const [showStartModal, setShowStartModal] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [restSeconds, setRestSeconds] = useState(0);
+  const [restDuration, setRestDuration] = useState(90);
+  const [restRunning, setRestRunning] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState(null);
 
@@ -186,6 +195,33 @@ export default function WorkoutApp() {
     };
   }, [activeSession ? true : false]);
 
+  // REST TIMER
+  useEffect(() => {
+    if (!restRunning || restSeconds <= 0) return;
+
+    const interval = setInterval(() => {
+      setRestSeconds(prev => {
+        if (prev <= 1) {
+          setRestRunning(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [restRunning, restSeconds]);
+
+  const startRestTimer = (seconds = restDuration) => {
+    setRestSeconds(seconds);
+    setRestRunning(true);
+  };
+
+  const skipRestTimer = () => {
+    setRestSeconds(0);
+    setRestRunning(false);
+  };
+
   const formatTime = (sec) => {
     const hrs = Math.floor(sec / 3600);
     const mins = Math.floor((sec % 3600) / 60);
@@ -205,9 +241,9 @@ export default function WorkoutApp() {
         id,
         name: ex ? ex.name : 'Ćwiczenie',
         sets: [
-          { reps: '', weight: '', done: false },
-          { reps: '', weight: '', done: false },
-          { reps: '', weight: '', done: false }
+          { reps: '', weight: '', rpe: '', done: false },
+          { reps: '', weight: '', rpe: '', done: false },
+          { reps: '', weight: '', rpe: '', done: false }
         ]
       };
     });
@@ -228,7 +264,7 @@ export default function WorkoutApp() {
         idx === exIdx
           ? {
               ...exercise,
-              sets: [...exercise.sets, { reps: '', weight: '', done: false }]
+              sets: [...exercise.sets, { reps: '', weight: '', rpe: '', done: false }]
             }
           : exercise
       )
@@ -312,6 +348,9 @@ export default function WorkoutApp() {
   };
 
   const toggleSetDone = (exIdx, setIdx) => {
+    const currentSet = activeSession?.exercises?.[exIdx]?.sets?.[setIdx];
+    const nextDone = !currentSet?.done;
+
     const updated = {
       ...activeSession,
       exercises: activeSession.exercises.map((exercise, idx) =>
@@ -327,6 +366,9 @@ export default function WorkoutApp() {
     };
 
     setActiveSession(updated);
+
+    // Po zakończeniu serii automatycznie uruchamiamy odpoczynek.
+    if (nextDone) startRestTimer();
   };
 
   const finishWorkout = () => {
@@ -365,6 +407,8 @@ export default function WorkoutApp() {
 
     setSummaryData(newEntry);
     setActiveSession(null);
+    setRestSeconds(0);
+    setRestRunning(false);
   };
 
   const deleteWorkoutHistory = (id) => {
@@ -441,6 +485,7 @@ export default function WorkoutApp() {
               sets: previous.sets.map(set => ({
                 reps: set.reps || '',
                 weight: set.weight || '',
+                rpe: set.rpe || '',
                 done: false
               }))
             }
@@ -479,6 +524,23 @@ export default function WorkoutApp() {
     }
 
     return streak;
+  };
+
+  const startQuickWorkout = () => {
+    const selected = exerciseDb.slice(0, Math.min(4, exerciseDb.length));
+    const sessionExercises = selected.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      sets: [
+        { reps: '', weight: '', rpe: '', done: false },
+        { reps: '', weight: '', rpe: '', done: false },
+        { reps: '', weight: '', rpe: '', done: false }
+      ]
+    }));
+
+    setActiveSession({ planName: 'Szybki trening', exercises: sessionExercises });
+    setActiveExIdx(0);
+    setShowStartModal(false);
   };
 
   const downloadCreatineReminder = () => {
@@ -532,11 +594,62 @@ END:VCALENDAR`;
     return null;
   };
 
+  const getExercisePR = (exId, exName) => {
+    let maxWeight = 0;
+    let bestReps = 0;
+    let bestVolume = 0;
+
+    workoutHistory.forEach(workout => {
+      const found = workout.exercises.find(
+        e => (e.id && e.id === exId) || e.name === exName
+      );
+      if (!found) return;
+
+      found.sets.forEach(set => {
+        const weight = parseFloat(set.weight) || 0;
+        const reps = parseInt(set.reps) || 0;
+        const volume = weight * reps;
+        if (weight > maxWeight || (weight === maxWeight && reps > bestReps)) {
+          maxWeight = weight;
+          bestReps = reps;
+        }
+        bestVolume = Math.max(bestVolume, volume);
+      });
+    });
+
+    return { maxWeight, bestReps, bestVolume };
+  };
+
+  const getSessionMetrics = () => {
+    if (!activeSession) return { totalSets: 0, completedSets: 0, volume: 0, reps: 0 };
+    let totalSets = 0;
+    let completedSets = 0;
+    let volume = 0;
+    let reps = 0;
+
+    activeSession.exercises.forEach(ex => {
+      ex.sets.forEach(set => {
+        totalSets += 1;
+        if (set.done) completedSets += 1;
+        const r = parseInt(set.reps) || 0;
+        const w = parseFloat(set.weight) || 0;
+        reps += r;
+        volume += r * w;
+      });
+    });
+
+    return { totalSets, completedSets, volume, reps };
+  };
+
   const currentEx = activeSession?.exercises[activeExIdx];
 
   const prevExData = currentEx
     ? getPreviousExData(currentEx.id, currentEx.name)
     : null;
+  const currentExPR = currentEx
+    ? getExercisePR(currentEx.id, currentEx.name)
+    : { maxWeight: 0, bestReps: 0, bestVolume: 0 };
+  const sessionMetrics = getSessionMetrics();
 
   const currentExCategory = currentEx
     ? (exerciseDb.find(e => e.id === currentEx.id)?.category || 'Trening')
@@ -683,7 +796,7 @@ END:VCALENDAR`;
           <div className="space-y-4">
 
             {/* EXERCISE HEADER */}
-            <div className={`rounded-3xl border p-4 ${bgCard} shadow-sm`}>
+            <div className={`rounded-[28px] border p-4 ${bgCard} shadow-sm overflow-hidden`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${textMuted}`}>
@@ -694,6 +807,14 @@ END:VCALENDAR`;
                   </h2>
                   <div className={`text-xs font-semibold mt-1 ${textMuted}`}>
                     {currentExCategory}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'}`}>
+                      <Award className="h-3 w-3" /> PR {currentExPR.maxWeight > 0 ? `${currentExPR.maxWeight} kg` : '—'}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black ${isDark ? 'bg-neutral-800 text-neutral-300' : 'bg-slate-100 text-slate-600'}`}>
+                      Ostatnio {prevExData ? prevExData.sets.length : 0} serii
+                    </span>
                   </div>
                 </div>
                 <div className={`shrink-0 px-3 py-2 rounded-2xl text-xs font-black ${isDark ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
@@ -721,6 +842,37 @@ END:VCALENDAR`;
                 })}
               </div>
             </div>
+
+            <div className={`rounded-3xl border p-3.5 ${isDark ? 'bg-neutral-900/70 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${textMuted}`}>Postęp treningu</div>
+                  <div className="text-sm font-black mt-0.5">{sessionMetrics.completedSets} / {sessionMetrics.totalSets} serii</div>
+                </div>
+                <div className={`text-xs font-black ${accentText}`}>{sessionMetrics.totalSets ? Math.round((sessionMetrics.completedSets / sessionMetrics.totalSets) * 100) : 0}%</div>
+              </div>
+              <div className={`h-2 rounded-full mt-2 overflow-hidden ${isDark ? 'bg-neutral-800' : 'bg-slate-100'}`}>
+                <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-300" style={{ width: `${sessionMetrics.totalSets ? (sessionMetrics.completedSets / sessionMetrics.totalSets) * 100 : 0}%` }} />
+              </div>
+            </div>
+
+            {restSeconds > 0 && (
+              <div className={`rounded-3xl border p-4 ${isDark ? 'bg-amber-950/30 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Przerwa</div>
+                    <div className="text-3xl font-black font-mono mt-1 tabular-nums">{formatTime(restSeconds)}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setRestSeconds(prev => prev + 30)} className={`px-3 py-2 rounded-xl text-[11px] font-black border ${isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-amber-200 bg-white text-amber-700'}`}>+30s</button>
+                    <button onClick={() => setRestRunning(prev => !prev)} className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'border-neutral-700 bg-neutral-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}>
+                      {restRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
+                    </button>
+                    <button onClick={skipRestTimer} className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'border-neutral-700 bg-neutral-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}><SkipForward className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* LAST RESULT — QUICK ACTION */}
             <div className={`rounded-3xl border p-4 ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
@@ -808,6 +960,22 @@ END:VCALENDAR`;
                             onChange={(e) => updateSet(activeExIdx, sIdx, 'weight', e.target.value)}
                             className={`w-full border rounded-xl px-2.5 py-2.5 text-center font-black text-base focus:border-violet-500 focus:outline-none ${bgInput}`}
                           />
+                        </div>
+                        <div className="col-span-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-[9px] font-black uppercase tracking-wider ${textMuted}`}>RPE</label>
+                            <span className={`text-[9px] font-black ${textMuted}`}>{set.rpe ? `Wysiłek ${set.rpe}/10` : 'opcjonalne'}</span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1">
+                            {[6, 7, 8, 9, 10].map(value => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => updateSet(activeExIdx, sIdx, 'rpe', String(value))}
+                                className={`py-1.5 rounded-lg text-[10px] font-black border transition-all ${String(set.rpe) === String(value) ? 'bg-violet-500 text-white border-violet-500' : isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-400' : 'bg-white border-slate-200 text-slate-500'}`}
+                              >{value}</button>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
@@ -962,13 +1130,22 @@ END:VCALENDAR`;
                   )}
                 </div>
 
-                <button
-                  onClick={() => setShowStartModal(true)}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setShowStartModal(true)}
                   className={`w-full py-4 ${accentBg} font-black tracking-wider uppercase rounded-2xl shadow-xl shadow-violet-500/10 text-center transition-transform active:scale-95 flex items-center justify-center space-x-2 text-base`}
                 >
                   <Play className="h-5 w-5 fill-current" />
-                  <span>ROZPOCZNIJ TRENING</span>
-                </button>
+                  <span>ROZPOCZNIJ</span>
+                  </button>
+                  <button
+                    onClick={startQuickWorkout}
+                    className={`py-4 rounded-2xl border font-black text-[11px] tracking-wider uppercase flex items-center justify-center gap-2 transition-all active:scale-95 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-200 hover:bg-neutral-800' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:bg-slate-50'}`}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    SZYBKI
+                  </button>
+                </div>
 
               </div>
             )}
@@ -1129,7 +1306,6 @@ END:VCALENDAR`;
                           {isMarked && hasWorkout && (
                             <span className="absolute bottom-1 h-1 w-1 rounded-full bg-white/90" />
                           )}
-                        >
                           {dayNum}
                         </button>
                       );
@@ -2073,6 +2249,23 @@ END:VCALENDAR`;
                     </button>
 
                   </div>
+                </div>
+
+                <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
+                  <div className="flex items-center gap-2">
+                    <Timer className={`h-4 w-4 ${accentText}`} />
+                    <span className="text-xs font-black uppercase tracking-wider">Domyślna przerwa</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[60, 90, 120].map(value => (
+                      <button
+                        key={value}
+                        onClick={() => setRestDuration(value)}
+                        className={`py-2.5 rounded-xl border text-xs font-black transition-all ${restDuration === value ? accentBg : isDark ? 'bg-neutral-950 border-neutral-800 text-neutral-400' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                      >{value}s</button>
+                    ))}
+                  </div>
+                  <p className={`text-[10px] ${textMuted}`}>Po oznaczeniu serii jako wykonanej timer uruchomi się automatycznie.</p>
                 </div>
               </div>
             )}
