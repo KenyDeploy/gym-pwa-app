@@ -1,2465 +1,909 @@
- import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dumbbell,
-  Calendar as CalendarIcon,
-  Plus,
-  Play,
-  Trash2,
-  CheckCircle,
-  X,
+  Activity,
+  Award,
+  BarChart3,
+  Bell,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Settings,
-  Moon,
-  Sun,
-  Timer,
+  CircleHelp,
+  Clock3,
   Copy,
-  Bell,
-  BarChart3,
-  ArrowRight,
-  ArrowLeft,
-  Trophy,
-  History,
-  Zap,
-  Activity,
-  UserCheck,
+  Dumbbell,
   Flame,
-  RotateCcw,
-  Pause,
-  SkipForward,
-  Award,
   Gauge,
-  PlusCircle
+  History,
+  Moon,
+  MoreHorizontal,
+  Pause,
+  Play,
+  Plus,
+  PlusCircle,
+  RotateCcw,
+  Settings,
+  SkipForward,
+  Sparkles,
+  Sun,
+  Target,
+  Timer,
+  Trash2,
+  Trophy,
+  UserCheck,
+  X,
+  Zap,
+  Check,
+  ChevronDown,
+  Download,
+  Upload,
+  RefreshCcw,
+  Layers3,
+  Scale,
 } from 'lucide-react';
 
+const STORAGE = {
+  theme: 'pm_theme',
+  exercises: 'pm_exercises',
+  plans: 'pm_plans',
+  history: 'pm_history',
+  markedDays: 'pm_marked_days',
+  bodyStats: 'pm_body_stats',
+  settings: 'pm_settings',
+};
+
+const DEFAULT_EXERCISES = [
+  { id: '1', name: 'Rozpiętki na maszynie', category: 'Klatka' },
+  { id: '2', name: 'Wyciskanie hantli nad głowę', category: 'Barki' },
+  { id: '3', name: 'Przysiady ze sztangą', category: 'Nogi' },
+  { id: '4', name: 'Uginanie ramion ze sztangą', category: 'Biceps' },
+  { id: '5', name: 'Wyciskanie sztangi leżąc', category: 'Klatka' },
+  { id: '6', name: 'Ściąganie drążka wyciągu', category: 'Plecy' },
+];
+
+const DEFAULT_PLANS = [
+  { id: '1', name: 'FBW A', exerciseIds: ['5', '6', '2', '3'] },
+  { id: '2', name: 'GÓRA', exerciseIds: ['5', '6', '2', '4'] },
+];
+
+const CATEGORY_META = {
+  Klatka: { icon: '◉', label: 'Klatka' },
+  Plecy: { icon: '↕', label: 'Plecy' },
+  Barki: { icon: '◇', label: 'Barki' },
+  Nogi: { icon: '△', label: 'Nogi' },
+  Biceps: { icon: '◎', label: 'Biceps' },
+  Triceps: { icon: '○', label: 'Triceps' },
+  Brzuch: { icon: '□', label: 'Brzuch' },
+};
+
+function readStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function uid(prefix = 'id') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseLocalDate(value) {
+  return new Date(`${value}T00:00:00`);
+}
+
+function formatDate(value, options = {}) {
+  if (!value) return '—';
+  return parseLocalDate(value).toLocaleDateString('pl-PL', options);
+}
+
+function formatDuration(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 1 }).format(value || 0);
+}
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() - day + 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function diffDays(a, b) {
+  const ms = parseLocalDate(a).getTime() - parseLocalDate(b).getTime();
+  return Math.round(ms / 86400000);
+}
+
 export default function WorkoutApp() {
-  // SPLASH SCREEN
-  const [showSplash, setShowSplash] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE.theme) || 'light');
+  const isDark = theme === 'dark';
 
-  // PERSISTENT STATE
-  const [theme, setTheme] = useState(() => localStorage.getItem('pm_theme') || 'dark');
+  const [exerciseDb, setExerciseDb] = useState(() => readStorage(STORAGE.exercises, DEFAULT_EXERCISES));
+  const [plans, setPlans] = useState(() => readStorage(STORAGE.plans, DEFAULT_PLANS));
+  const [workoutHistory, setWorkoutHistory] = useState(() => readStorage(STORAGE.history, []));
+  const [markedDays, setMarkedDays] = useState(() => readStorage(STORAGE.markedDays, []));
+  const [bodyStats, setBodyStats] = useState(() => readStorage(STORAGE.bodyStats, []));
+  const [settings, setSettings] = useState(() => ({
+    defaultRest: 90,
+    vibration: true,
+    ...readStorage(STORAGE.settings, {}),
+  }));
 
-  const [exerciseDb, setExerciseDb] = useState(() => {
-    const saved = localStorage.getItem('pm_exercises');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'Rozpiętki na maszynie', category: 'Klatka' },
-      { id: '2', name: 'Wyciskanie hantli nad głowę', category: 'Barki' },
-      { id: '3', name: 'Przysiady ze sztangą', category: 'Nogi' },
-      { id: '4', name: 'Uginanie ramion ze sztangą', category: 'Biceps' }
-    ];
-  });
-
-  const [plans, setPlans] = useState(() => {
-    const saved = localStorage.getItem('pm_plans');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'Plan FBW A', exerciseIds: ['1', '2', '3', '4'] }
-    ];
-  });
-
-  const [workoutHistory, setWorkoutHistory] = useState(() => {
-    const saved = localStorage.getItem('pm_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [markedDays, setMarkedDays] = useState(() => {
-    const saved = localStorage.getItem('pm_marked_days');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // BODY MEASUREMENTS
-  const [bodyStats, setBodyStats] = useState(() => {
-    const saved = localStorage.getItem('pm_body_stats');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: '1',
-        date: '2026-08-01',
-        weight: 82.5,
-        chest: 108,
-        arm: 39,
-        waist: 86,
-        thigh: 61
-      }
-    ];
-  });
-
-  // UI STATES
-  const [activeTab, setActiveTab] = useState('start');
-  const [statsSubTab, setStatsSubTab] = useState('records');
-  const [newExName, setNewExName] = useState('');
-  const [isCreatingPlan, setIsCreatingPlan] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
+  const [activeSession, setActiveSession] = useState(null);
+  const [activeExIdx, setActiveExIdx] = useState(0);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [restSeconds, setRestSeconds] = useState(0);
+  const [restRunning, setRestRunning] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(localDateString());
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [showPlanSheet, setShowPlanSheet] = useState(false);
+  const [showFinishSheet, setShowFinishSheet] = useState(false);
+  const [finishNote, setFinishNote] = useState('');
+  const [toast, setToast] = useState(null);
+  const [exerciseQuery, setExerciseQuery] = useState('');
+  const [selectedStatsExercise, setSelectedStatsExercise] = useState('');
+  const [newExerciseName, setNewExerciseName] = useState('');
+  const [newExerciseCategory, setNewExerciseCategory] = useState('Klatka');
   const [newPlanName, setNewPlanName] = useState('');
-  const [selectedExForPlan, setSelectedExForPlan] = useState([]);
-  const [selectedStatExId, setSelectedStatExId] = useState('');
-
-  // MEASUREMENT FORM
+  const [selectedPlanExerciseIds, setSelectedPlanExerciseIds] = useState([]);
+  const [showCreatePlan, setShowCreatePlan] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [newChest, setNewChest] = useState('');
   const [newArm, setNewArm] = useState('');
   const [newWaist, setNewWaist] = useState('');
   const [newThigh, setNewThigh] = useState('');
+  const [restPulse, setRestPulse] = useState(0);
+  const importRef = useRef(null);
+  const timerRef = useRef(null);
+  const restTimerRef = useRef(null);
 
-  // WORKOUT SESSION
-  const [activeSession, setActiveSession] = useState(null);
-  const activeSessionRef = useRef(activeSession);
-  activeSessionRef.current = activeSession;
-
-  const [activeExIdx, setActiveExIdx] = useState(0);
-  const [showStartModal, setShowStartModal] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [restSeconds, setRestSeconds] = useState(0);
-  const [restDuration, setRestDuration] = useState(90);
-  const [restRunning, setRestRunning] = useState(false);
-  const [summaryData, setSummaryData] = useState(null);
-  const [selectedHistoryDate, setSelectedHistoryDate] = useState(null);
-
-  // SETTINGS
-  const [creatineTime, setCreatineTime] = useState('09:00');
-  const [currentDate, setCurrentDate] = useState(new Date());
-
-  // LOCAL DATE - avoids UTC date shifting
-  const getLocalDateString = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const notify = (message, tone = 'default') => {
+    setToast({ id: Date.now(), message, tone });
+    window.setTimeout(() => setToast(null), 2400);
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Brak';
-    return new Date(`${dateStr}T00:00:00`).toLocaleDateString('pl-PL');
-  };
-
-  // SPLASH SCREEN - REAL PROGRESS
-  useEffect(() => {
-    let progress = 0;
-
-    const interval = setInterval(() => {
-      progress += Math.random() * 10 + 5;
-
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-
-        setTimeout(() => {
-          setShowSplash(false);
-        }, 350);
-      }
-
-      setLoadingProgress(Math.floor(progress));
-    }, 130);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // SAVE TO LOCALSTORAGE
-  useEffect(() => {
-    localStorage.setItem('pm_theme', theme);
-  }, [theme]);
+  useEffect(() => localStorage.setItem(STORAGE.theme, theme), [theme]);
+  useEffect(() => localStorage.setItem(STORAGE.exercises, JSON.stringify(exerciseDb)), [exerciseDb]);
+  useEffect(() => localStorage.setItem(STORAGE.plans, JSON.stringify(plans)), [plans]);
+  useEffect(() => localStorage.setItem(STORAGE.history, JSON.stringify(workoutHistory)), [workoutHistory]);
+  useEffect(() => localStorage.setItem(STORAGE.markedDays, JSON.stringify(markedDays)), [markedDays]);
+  useEffect(() => localStorage.setItem(STORAGE.bodyStats, JSON.stringify(bodyStats)), [bodyStats]);
+  useEffect(() => localStorage.setItem(STORAGE.settings, JSON.stringify(settings)), [settings]);
 
   useEffect(() => {
-    localStorage.setItem('pm_exercises', JSON.stringify(exerciseDb));
-  }, [exerciseDb]);
+    if (!activeSession) return undefined;
+    timerRef.current = window.setInterval(() => setSessionSeconds((v) => v + 1), 1000);
+    return () => window.clearInterval(timerRef.current);
+  }, [activeSession]);
 
   useEffect(() => {
-    localStorage.setItem('pm_plans', JSON.stringify(plans));
-  }, [plans]);
-
-  useEffect(() => {
-    localStorage.setItem('pm_history', JSON.stringify(workoutHistory));
-  }, [workoutHistory]);
-
-  useEffect(() => {
-    localStorage.setItem('pm_marked_days', JSON.stringify(markedDays));
-  }, [markedDays]);
-
-  useEffect(() => {
-    localStorage.setItem('pm_body_stats', JSON.stringify(bodyStats));
-  }, [bodyStats]);
-
-  // TIMER
-  useEffect(() => {
-    let interval = null;
-
-    if (activeSession) {
-      interval = setInterval(() => {
-        setTimerSeconds(prev => prev + 1);
-      }, 1000);
-    } else {
-      setTimerSeconds(0);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [activeSession ? true : false]);
-
-  // REST TIMER
-  useEffect(() => {
-    if (!restRunning || restSeconds <= 0) return;
-
-    const interval = setInterval(() => {
-      setRestSeconds(prev => {
-        if (prev <= 1) {
+    if (!restRunning) return undefined;
+    restTimerRef.current = window.setInterval(() => {
+      setRestSeconds((value) => {
+        if (value <= 1) {
+          window.clearInterval(restTimerRef.current);
           setRestRunning(false);
+          setRestPulse((v) => v + 1);
+          if (settings.vibration && navigator.vibrate) navigator.vibrate([120, 80, 120]);
+          notify('Przerwa zakończona. Lecimy dalej 🔥', 'success');
           return 0;
         }
-        return prev - 1;
+        return value - 1;
       });
     }, 1000);
+    return () => window.clearInterval(restTimerRef.current);
+  }, [restRunning, settings.vibration]);
 
-    return () => clearInterval(interval);
-  }, [restRunning, restSeconds]);
+  useEffect(() => {
+    if (restPulse > 0) document.title = '🔥 GOTOWE — PAKIERNIA';
+  }, [restPulse]);
 
-  const startRestTimer = (seconds = restDuration) => {
-    setRestSeconds(seconds);
-    setRestRunning(true);
-  };
+  const today = localDateString();
+  const latestStats = bodyStats[0] || {};
 
-  const skipRestTimer = () => {
-    setRestSeconds(0);
-    setRestRunning(false);
-  };
+  const historyDays = useMemo(() => new Set(workoutHistory.map((w) => w.date)), [workoutHistory]);
+  const markedSet = useMemo(() => new Set(markedDays), [markedDays]);
 
-  const formatTime = (sec) => {
-    const hrs = Math.floor(sec / 3600);
-    const mins = Math.floor((sec % 3600) / 60);
-    const secs = sec % 60;
+  const sortedHistory = useMemo(
+    () => [...workoutHistory].sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`)),
+    [workoutHistory],
+  );
 
-    return `${hrs > 0 ? hrs + ':' : ''}${mins
-      .toString()
-      .padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const currentMonthKey = `${new Date().getFullYear()}-${new Date().getMonth()}`;
+  const monthWorkouts = useMemo(
+    () => workoutHistory.filter((w) => {
+      const d = parseLocalDate(w.date);
+      return `${d.getFullYear()}-${d.getMonth()}` === currentMonthKey;
+    }),
+    [workoutHistory, currentMonthKey],
+  );
 
-  // WORKOUT LOGIC
+  const streak = useMemo(() => {
+    const unique = [...new Set(workoutHistory.map((w) => w.date))].sort((a, b) => b.localeCompare(a));
+    if (!unique.length) return 0;
+    let base = unique[0];
+    if (diffDays(today, base) > 1) return 0;
+    let count = 1;
+    for (let i = 1; i < unique.length; i += 1) {
+      if (diffDays(base, unique[i]) === 1) {
+        count += 1;
+        base = unique[i];
+      } else break;
+    }
+    return count;
+  }, [workoutHistory, today]);
+
+  const lastWorkout = sortedHistory[0] || null;
+  const totalVolume = workoutHistory.reduce((sum, w) => sum + (Number(w.totalWeight) || 0), 0);
+  const totalSets = workoutHistory.reduce(
+    (sum, w) => sum + (w.exercises || []).reduce((s, ex) => s + (ex.sets || []).length, 0),
+    0,
+  );
+  const activeExercise = activeSession?.exercises?.[activeExIdx] || null;
+
+  const previousExerciseData = useMemo(() => {
+    if (!activeExercise) return null;
+    for (const workout of sortedHistory) {
+      const found = (workout.exercises || []).find(
+        (e) => (e.id && e.id === activeExercise.id) || e.name === activeExercise.name,
+      );
+      if (found) return found;
+    }
+    return null;
+  }, [activeExercise, sortedHistory]);
+
+  const exercisePR = useMemo(() => {
+    if (!activeExercise) return 0;
+    let max = 0;
+    workoutHistory.forEach((w) => {
+      (w.exercises || []).forEach((ex) => {
+        if ((ex.id && ex.id === activeExercise.id) || ex.name === activeExercise.name) {
+          (ex.sets || []).forEach((s) => {
+            max = Math.max(max, Number(s.weight) || 0);
+          });
+        }
+      });
+    });
+    return max;
+  }, [activeExercise, workoutHistory]);
+
+  const sessionProgress = activeSession
+    ? Math.round(
+        (activeSession.exercises.reduce((done, ex) => done + ex.sets.filter((s) => s.done).length, 0) /
+          Math.max(1, activeSession.exercises.reduce((all, ex) => all + ex.sets.length, 0))) *
+          100,
+      )
+    : 0;
+
+  const currentExerciseVolume = activeExercise
+    ? activeExercise.sets.reduce((sum, s) => sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0)
+    : 0;
+
   const startWorkout = (plan) => {
-    const sessionExercises = plan.exerciseIds.map(id => {
-      const ex = exerciseDb.find(e => e.id === id);
-
+    const sessionExercises = (plan.exerciseIds || []).map((id) => {
+      const ex = exerciseDb.find((item) => item.id === id);
+      const previous = sortedHistory.flatMap((w) => w.exercises || []).find(
+        (e) => (e.id && e.id === id) || e.name === ex?.name,
+      );
+      const baseSets = previous?.sets?.length ? previous.sets : [{ reps: '', weight: '', rpe: '', done: false }, { reps: '', weight: '', rpe: '', done: false }, { reps: '', weight: '', rpe: '', done: false }];
       return {
         id,
-        name: ex ? ex.name : 'Ćwiczenie',
-        sets: [
-          { reps: '', weight: '', rpe: '', done: false },
-          { reps: '', weight: '', rpe: '', done: false },
-          { reps: '', weight: '', rpe: '', done: false }
-        ]
+        name: ex?.name || 'Ćwiczenie',
+        category: ex?.category || 'Trening',
+        sets: baseSets.map((s) => ({ reps: s.reps ?? '', weight: s.weight ?? '', rpe: s.rpe ?? '', done: false })),
       };
     });
-
-    setActiveSession({
-      planName: plan.name,
-      exercises: sessionExercises
-    });
-
+    setActiveSession({ id: uid('session'), planId: plan.id, planName: plan.name, exercises: sessionExercises, startedAt: Date.now(), note: '' });
     setActiveExIdx(0);
-    setShowStartModal(false);
+    setSessionSeconds(0);
+    setRestSeconds(0);
+    setRestRunning(false);
+    setActiveTab('workout');
+    setShowPlanSheet(false);
   };
 
-  const addSet = (exIdx) => {
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx
-          ? {
-              ...exercise,
-              sets: [...exercise.sets, { reps: '', weight: '', rpe: '', done: false }]
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
+  const startQuickWorkout = () => {
+    startWorkout({ id: uid('quick'), name: 'Szybki trening', exerciseIds: [exerciseDb[0]?.id || '1'] });
   };
 
-  const deleteSpecificSet = (exIdx, setIdx) => {
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx && exercise.sets.length > 1
-          ? {
-              ...exercise,
-              sets: exercise.sets.filter((_, i) => i !== setIdx)
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
-  };
-
-  const removeSet = (exIdx) => {
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx && exercise.sets.length > 1
-          ? {
-              ...exercise,
-              sets: exercise.sets.slice(0, -1)
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
-  };
-
-  const updateSet = (exIdx, setIdx, field, val) => {
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx
-          ? {
-              ...exercise,
-              sets: exercise.sets.map((set, i) =>
-                i === setIdx
-                  ? { ...set, [field]: val }
-                  : set
-              )
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
-  };
-
-  const copyPreviousSet = (exIdx, setIdx) => {
-    if (setIdx === 0) return;
-
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx
-          ? {
-              ...exercise,
-              sets: exercise.sets.map((set, i) =>
-                i === setIdx
-                  ? { ...exercise.sets[setIdx - 1], done: false }
-                  : set
-              )
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
+  const updateSessionSet = (exIdx, setIdx, field, value) => {
+    setActiveSession((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, idx) =>
+        idx !== exIdx
+          ? exercise
+          : { ...exercise, sets: exercise.sets.map((s, i) => (i === setIdx ? { ...s, [field]: value } : s)) },
+      ),
+    }));
   };
 
   const toggleSetDone = (exIdx, setIdx) => {
-    const currentSet = activeSession?.exercises?.[exIdx]?.sets?.[setIdx];
-    const nextDone = !currentSet?.done;
+    const next = !activeSession.exercises[exIdx].sets[setIdx].done;
+    updateSessionSet(exIdx, setIdx, 'done', next);
+    if (next) {
+      setRestSeconds(settings.defaultRest);
+      setRestRunning(true);
+      if (settings.vibration && navigator.vibrate) navigator.vibrate(50);
+    }
+  };
 
-    const updated = {
-      ...activeSession,
-      exercises: activeSession.exercises.map((exercise, idx) =>
-        idx === exIdx
-          ? {
+  const addSet = (exIdx, copyLast = false) => {
+    setActiveSession((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, idx) => {
+        if (idx !== exIdx) return exercise;
+        const last = exercise.sets[exercise.sets.length - 1];
+        const fresh = copyLast && last ? { ...last, done: false } : { reps: '', weight: '', rpe: '', done: false };
+        return { ...exercise, sets: [...exercise.sets, fresh] };
+      }),
+    }));
+  };
+
+  const removeSet = (exIdx, setIdx) => {
+    setActiveSession((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, idx) =>
+        idx === exIdx && exercise.sets.length > 1
+          ? { ...exercise, sets: exercise.sets.filter((_, i) => i !== setIdx) }
+          : exercise,
+      ),
+    }));
+  };
+
+  const applyPrevious = () => {
+    if (!previousExerciseData) return;
+    setActiveSession((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, idx) =>
+        idx !== activeExIdx
+          ? exercise
+          : {
               ...exercise,
-              sets: exercise.sets.map((set, i) =>
-                i === setIdx ? { ...set, done: !set.done } : set
-              )
-            }
-          : exercise
-      )
-    };
-
-    setActiveSession(updated);
-
-    // Po zakończeniu serii automatycznie uruchamiamy odpoczynek.
-    if (nextDone) startRestTimer();
+              sets: previousExerciseData.sets.map((s) => ({ reps: s.reps ?? '', weight: s.weight ?? '', rpe: '', done: false })),
+            },
+      ),
+    }));
+    notify('Wynik z ostatniego treningu został wczytany');
   };
 
   const finishWorkout = () => {
     if (!activeSession) return;
-
-    const todayStr = getLocalDateString();
-
-    let totalReps = 0;
-    let totalWeight = 0;
-
-    activeSession.exercises.forEach(ex => {
-      ex.sets.forEach(s => {
-        const r = parseInt(s.reps) || 0;
-        const w = parseFloat(s.weight) || 0;
-
-        totalReps += r;
-        totalWeight += r * w;
-      });
-    });
-
-    const newEntry = {
-      id: Date.now().toString(),
-      date: todayStr,
-      duration: formatTime(timerSeconds),
+    const cleanExercises = activeSession.exercises.map((ex) => ({
+      ...ex,
+      sets: ex.sets.map((s) => ({ ...s, done: Boolean(s.done) })),
+    }));
+    const totalReps = cleanExercises.reduce((sum, ex) => sum + ex.sets.reduce((s, set) => s + (Number(set.reps) || 0), 0), 0);
+    const totalWeight = cleanExercises.reduce(
+      (sum, ex) => sum + ex.sets.reduce((s, set) => s + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0),
+      0,
+    );
+    const entry = {
+      id: uid('workout'),
+      date: today,
+      duration: formatDuration(sessionSeconds),
       planName: activeSession.planName,
       totalReps,
       totalWeight,
-      exercises: activeSession.exercises
+      note: finishNote,
+      exercises: cleanExercises,
     };
-
-    setWorkoutHistory(prev => [newEntry, ...prev]);
-
-    if (!markedDays.includes(todayStr)) {
-      setMarkedDays(prev => [...prev, todayStr]);
-    }
-
-    setSummaryData(newEntry);
+    setWorkoutHistory((prev) => [entry, ...prev]);
+    setMarkedDays((prev) => (prev.includes(today) ? prev : [...prev, today]));
     setActiveSession(null);
-    setRestSeconds(0);
+    setShowFinishSheet(false);
+    setFinishNote('');
+    setActiveTab('home');
     setRestRunning(false);
+    setRestSeconds(0);
+    notify('Trening zapisany. Dobra robota! 💪', 'success');
   };
 
-  const deleteWorkoutHistory = (id) => {
-    const removed = workoutHistory.find(item => item.id === id);
-    if (!removed) return;
-
-    const hasAnotherWorkoutThatDay = workoutHistory.some(
-      item => item.id !== id && item.date === removed.date
-    );
-
-    setWorkoutHistory(prev => prev.filter(item => item.id !== id));
-
-    if (!hasAnotherWorkoutThatDay) {
-      setMarkedDays(prev => prev.filter(day => day !== removed.date));
+  const deleteWorkout = (id) => {
+    const item = workoutHistory.find((w) => w.id === id);
+    if (!item) return;
+    setWorkoutHistory((prev) => prev.filter((w) => w.id !== id));
+    const dayHasOther = workoutHistory.some((w) => w.id !== id && w.date === item.date);
+    if (!dayHasOther) {
+      setMarkedDays((prev) => prev.filter((d) => d !== item.date));
     }
-
-    if (removed.date === selectedHistoryDate && !hasAnotherWorkoutThatDay) {
-      setSelectedHistoryDate(null);
-    }
+    notify('Trening usunięty');
   };
 
-  // BODY STATS
-  const saveBodyStats = (e) => {
-    e.preventDefault();
-
-    if (!newWeight && !newArm && !newWaist && !newChest && !newThigh) {
+  const toggleMarkedDay = (date) => {
+    if (historyDays.has(date)) {
+      setSelectedDate(date);
       return;
     }
+    setMarkedDays((prev) => (prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]));
+    setSelectedDate(date);
+  };
 
-    const todayStr = getLocalDateString();
-    const prev = bodyStats[0] || {};
-
-    const newEntry = {
-      id: Date.now().toString(),
-      date: todayStr,
-      weight: newWeight !== '' ? parseFloat(newWeight) : (prev.weight || 0),
-      chest: newChest !== '' ? parseFloat(newChest) : (prev.chest || 0),
-      arm: newArm !== '' ? parseFloat(newArm) : (prev.arm || 0),
-      waist: newWaist !== '' ? parseFloat(newWaist) : (prev.waist || 0),
-      thigh: newThigh !== '' ? parseFloat(newThigh) : (prev.thigh || 0)
+  const saveBodyMeasurement = (e) => {
+    e.preventDefault();
+    if (![newWeight, newChest, newArm, newWaist, newThigh].some(Boolean)) return;
+    const previous = bodyStats[0] || {};
+    const entry = {
+      id: uid('measurement'), date: today,
+      weight: newWeight !== '' ? Number(newWeight) : Number(previous.weight) || 0,
+      chest: newChest !== '' ? Number(newChest) : Number(previous.chest) || 0,
+      arm: newArm !== '' ? Number(newArm) : Number(previous.arm) || 0,
+      waist: newWaist !== '' ? Number(newWaist) : Number(previous.waist) || 0,
+      thigh: newThigh !== '' ? Number(newThigh) : Number(previous.thigh) || 0,
     };
-
-    setBodyStats(prevStats => [newEntry, ...prevStats]);
-
-    setNewWeight('');
-    setNewChest('');
-    setNewArm('');
-    setNewWaist('');
-    setNewThigh('');
+    setBodyStats((prev) => [entry, ...prev]);
+    setNewWeight(''); setNewChest(''); setNewArm(''); setNewWaist(''); setNewThigh('');
+    notify('Pomiar zapisany', 'success');
   };
 
-  const toggleDayMark = (dateStr) => {
-    setMarkedDays(prev =>
-      prev.includes(dateStr)
-        ? prev.filter(d => d !== dateStr)
-        : [...prev, dateStr]
-    );
+  const createExercise = (e) => {
+    e.preventDefault();
+    if (!newExerciseName.trim()) return;
+    const item = { id: uid('exercise'), name: newExerciseName.trim(), category: newExerciseCategory };
+    setExerciseDb((prev) => [...prev, item]);
+    setNewExerciseName('');
+    notify('Dodano ćwiczenie');
   };
 
-  const fillFromPreviousWorkout = (exIdx) => {
-    const previous = getPreviousExData(
-      activeSession?.exercises[exIdx]?.id,
-      activeSession?.exercises[exIdx]?.name
-    );
-
-    if (!previous) return;
-
-    setActiveSession(prev => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise, idx) =>
-        idx === exIdx
-          ? {
-              ...exercise,
-              sets: previous.sets.map(set => ({
-                reps: set.reps || '',
-                weight: set.weight || '',
-                rpe: set.rpe || '',
-                done: false
-              }))
-            }
-          : exercise
-      )
-    }));
+  const createPlan = (e) => {
+    e.preventDefault();
+    if (!newPlanName.trim() || selectedPlanExerciseIds.length === 0) return;
+    setPlans((prev) => [...prev, { id: uid('plan'), name: newPlanName.trim(), exerciseIds: selectedPlanExerciseIds }]);
+    setNewPlanName('');
+    setSelectedPlanExerciseIds([]);
+    setShowCreatePlan(false);
+    notify('Plan utworzony', 'success');
   };
 
-  const goToToday = () => {
-    const today = new Date();
-    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedHistoryDate(getLocalDateString());
-  };
-
-  const getWorkoutCountForMonth = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    return workoutHistory.filter(w => {
-      const d = new Date(`${w.date}T00:00:00`);
-      return d.getFullYear() === year && d.getMonth() === month;
-    }).length;
-  };
-
-  const getCurrentStreak = () => {
-    const days = new Set(
-      workoutHistory.map(w => w.date)
-    );
-    let streak = 0;
-    const cursor = new Date();
-
-    while (days.has(
-      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
-    )) {
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-
-    return streak;
-  };
-
-  const startQuickWorkout = () => {
-    const selected = exerciseDb.slice(0, Math.min(4, exerciseDb.length));
-    const sessionExercises = selected.map(ex => ({
-      id: ex.id,
-      name: ex.name,
-      sets: [
-        { reps: '', weight: '', rpe: '', done: false },
-        { reps: '', weight: '', rpe: '', done: false },
-        { reps: '', weight: '', rpe: '', done: false }
-      ]
-    }));
-
-    setActiveSession({ planName: 'Szybki trening', exercises: sessionExercises });
-    setActiveExIdx(0);
-    setShowStartModal(false);
-  };
-
-  const downloadCreatineReminder = () => {
-    const [hh, mm] = creatineTime.split(':');
-
-    const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Pakiernia U Matiego//Kreatyna//PL
-BEGIN:VEVENT
-SUMMARY:Bierz Kreatynę! 5g
-DESCRIPTION:Przypomnienie o codziennej dawce kreatyny.
-RRULE:FREQ=DAILY
-DTSTART:${getLocalDateString().replaceAll('-', '')}T${hh}${mm}00
-DURATION:PT15M
-END:VEVENT
-END:VCALENDAR`;
-
-    const blob = new Blob([icsContent], {
-      type: 'text/calendar;charset=utf-8;'
-    });
-
-    const url = window.URL.createObjectURL(blob);
+  const exportData = () => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      version: 3,
+      theme, exerciseDb, plans, workoutHistory, markedDays, bodyStats, settings,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-
     link.href = url;
-    link.setAttribute('download', 'kreatyna.ics');
-
-    document.body.appendChild(link);
+    link.download = `pakiernia-backup-${today}.json`;
     link.click();
-    document.body.removeChild(link);
-
-    window.URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
+    notify('Backup pobrany');
   };
 
-  const getPreviousExData = (exId, exName) => {
-    for (const w of workoutHistory) {
-      const found = w.exercises.find(
-        e => (e.id && e.id === exId) || e.name === exName
-      );
-
-      if (
-        found &&
-        found.sets.some(
-          s => parseFloat(s.weight) > 0 || parseInt(s.reps) > 0
-        )
-      ) {
-        return found;
+  const importData = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (Array.isArray(data.workoutHistory)) setWorkoutHistory(data.workoutHistory);
+        if (Array.isArray(data.exerciseDb)) setExerciseDb(data.exerciseDb);
+        if (Array.isArray(data.plans)) setPlans(data.plans);
+        if (Array.isArray(data.markedDays)) setMarkedDays(data.markedDays);
+        if (Array.isArray(data.bodyStats)) setBodyStats(data.bodyStats);
+        if (data.settings) setSettings((prev) => ({ ...prev, ...data.settings }));
+        notify('Backup przywrócony', 'success');
+      } catch {
+        notify('Nie udało się odczytać pliku', 'error');
       }
-    }
-
-    return null;
+    };
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
-  const getExercisePR = (exId, exName) => {
-    let maxWeight = 0;
-    let bestReps = 0;
-    let bestVolume = 0;
+  const calendarGrid = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const first = new Date(year, month, 1);
+    const days = new Date(year, month + 1, 0).getDate();
+    const blank = (first.getDay() || 7) - 1;
+    return [...Array(blank).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  }, [calendarMonth]);
 
-    workoutHistory.forEach(workout => {
-      const found = workout.exercises.find(
-        e => (e.id && e.id === exId) || e.name === exName
-      );
-      if (!found) return;
+  const selectedDateWorkouts = workoutHistory.filter((w) => w.date === selectedDate);
 
-      found.sets.forEach(set => {
-        const weight = parseFloat(set.weight) || 0;
-        const reps = parseInt(set.reps) || 0;
-        const volume = weight * reps;
-        if (weight > maxWeight || (weight === maxWeight && reps > bestReps)) {
-          maxWeight = weight;
-          bestReps = reps;
-        }
-        bestVolume = Math.max(bestVolume, volume);
+  const statsForExercise = useMemo(() => {
+    if (!selectedStatsExercise) return [];
+    const target = exerciseDb.find((e) => e.id === selectedStatsExercise);
+    if (!target) return [];
+    return [...workoutHistory]
+      .filter((w) => (w.exercises || []).some((e) => (e.id && e.id === target.id) || e.name === target.name))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((w) => {
+        const ex = (w.exercises || []).find((e) => (e.id && e.id === target.id) || e.name === target.name);
+        const maxWeight = Math.max(0, ...(ex?.sets || []).map((s) => Number(s.weight) || 0));
+        const volume = (ex?.sets || []).reduce((sum, s) => sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
+        return { date: w.date, maxWeight, volume, sets: ex?.sets?.length || 0 };
       });
+  }, [selectedStatsExercise, exerciseDb, workoutHistory]);
+
+  const navItems = [
+    { id: 'history', label: 'Historia', icon: CalendarDays },
+    { id: 'stats', label: 'Postęp', icon: BarChart3 },
+    { id: 'plans', label: 'Plany', icon: Layers3 },
+    { id: 'home', label: 'Start', icon: Play, primary: true },
+    { id: 'exercises', label: 'Ćwiczenia', icon: Plus },
+    { id: 'settings', label: 'Ustawienia', icon: Settings },
+  ];
+
+  const shell = isDark
+    ? 'bg-[#08080d] text-white'
+    : 'bg-[#f6f8fc] text-[#101729]';
+  const card = isDark
+    ? 'bg-[#11131b] border-white/[0.07]'
+    : 'bg-white border-[#e4e8f1]';
+  const muted = isDark ? 'text-[#8e95a7]' : 'text-[#6f7a8e]';
+  const soft = isDark ? 'bg-white/[0.035]' : 'bg-[#f3f6fb]';
+  const primary = 'bg-[#5b4df4] hover:bg-[#4f42df] text-white';
+  const primaryText = isDark ? 'text-[#9a90ff]' : 'text-[#5447e9]';
+
+  const StatPill = ({ icon: Icon, label, value, accent = false }) => (
+    <div className={`rounded-2xl border px-4 py-3 ${card}`}>
+      <div className={`flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] ${muted}`}>
+        <Icon className={`h-4 w-4 ${accent ? primaryText : ''}`} />
+        <span>{label}</span>
+      </div>
+      <div className={`mt-1.5 text-2xl font-black tracking-tight ${accent ? primaryText : ''}`}>{value}</div>
+    </div>
+  );
+
+  const Header = () => (
+    <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${isDark ? 'bg-[#08080d]/85 border-white/[0.06]' : 'bg-white/85 border-[#e9ecf3]'}`}>
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 lg:px-6">
+        <button onClick={() => setActiveTab('home')} className="flex items-center gap-3 text-left">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${isDark ? 'bg-[#171522]' : 'bg-[#f0edff]'}`}>
+            <Dumbbell className={`h-5 w-5 ${primaryText}`} />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.24em]">PAKIERNIA</div>
+            <div className={`-mt-0.5 text-sm font-black ${primaryText}`}>U MATIEGO</div>
+          </div>
+        </button>
+        {activeSession && (
+          <button
+            onClick={() => setActiveTab('workout')}
+            className={`flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-black ${isDark ? 'border-[#6b5cff]/30 bg-[#6b5cff]/10 text-[#a59dff]' : 'border-[#d8d3ff] bg-[#f3f1ff] text-[#5144e7]'}`}
+          >
+            <Timer className="h-4 w-4" />
+            {formatDuration(sessionSeconds)}
+          </button>
+        )}
+      </div>
+    </header>
+  );
+
+  const HomePage = () => {
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(startOfWeek(new Date()));
+      d.setDate(d.getDate() + i);
+      return { date: localDateString(d), day: d.toLocaleDateString('pl-PL', { weekday: 'short' }).replace('.', ''), num: d.getDate() };
     });
 
-    return { maxWeight, bestReps, bestVolume };
+    return (
+      <div className="space-y-5">
+        <section className={`overflow-hidden rounded-[28px] border p-5 sm:p-6 ${card}`}>
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className={`text-[10px] font-black uppercase tracking-[0.25em] ${primaryText}`}>DASHBOARD</div>
+              <h1 className="mt-2 max-w-xl text-[34px] font-black leading-[1.04] tracking-[-0.04em] sm:text-5xl">
+                {streak > 0 ? 'Trzymasz tempo. Nie odpuszczaj.' : 'Gotowy na kolejny trening?'}
+              </h1>
+              <p className={`mt-3 max-w-xl text-sm leading-6 ${muted}`}>
+                Wszystko w jednym miejscu: plan, progres, rekordy i historia. Podczas treningu liczy się tylko następna seria.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button onClick={() => setShowPlanSheet(true)} className={`rounded-2xl px-5 py-3.5 text-sm font-black shadow-[0_12px_30px_rgba(91,77,244,0.22)] ${primary}`}>
+                <span className="flex items-center gap-2"><Play className="h-4 w-4 fill-current" /> Rozpocznij</span>
+              </button>
+              <button onClick={startQuickWorkout} className={`rounded-2xl border px-5 py-3.5 text-sm font-black ${card}`}>
+                <span className="flex items-center gap-2"><PlusCircle className="h-4 w-4" /> Szybki</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatPill icon={Flame} label="Streak" value={`${streak} dni`} accent />
+          <StatPill icon={CalendarDays} label="W tym miesiącu" value={monthWorkouts.length} />
+          <StatPill icon={Trophy} label="Treningów" value={workoutHistory.length} />
+          <StatPill icon={Activity} label="Łączny tonaż" value={`${formatNumber(totalVolume)} kg`} />
+        </div>
+
+        <section className="grid gap-5 lg:grid-cols-[1.4fr_.9fr]">
+          <div className={`rounded-[26px] border p-5 ${card}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className={`text-[10px] font-black uppercase tracking-[0.22em] ${muted}`}>OSTATNI TRENING</div>
+                <div className="mt-2 text-xl font-black">{lastWorkout?.planName || 'Jeszcze nie trenowałeś'}</div>
+              </div>
+              {lastWorkout && <div className={`text-right text-xs font-bold ${muted}`}>{formatDate(lastWorkout.date)}</div>}
+            </div>
+            {lastWorkout ? (
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                <div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] uppercase font-black ${muted}`}>Czas</div><div className="mt-1 font-black">{lastWorkout.duration}</div></div>
+                <div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] uppercase font-black ${muted}`}>Powtórzenia</div><div className="mt-1 font-black">{lastWorkout.totalReps || 0}</div></div>
+                <div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] uppercase font-black ${muted}`}>Tonaż</div><div className={`mt-1 font-black ${primaryText}`}>{formatNumber(lastWorkout.totalWeight)} kg</div></div>
+              </div>
+            ) : (
+              <div className={`mt-5 rounded-2xl p-4 text-sm ${soft} ${muted}`}>Zacznij pierwszy trening i tutaj pojawi się podsumowanie.</div>
+            )}
+          </div>
+
+          <div className={`rounded-[26px] border p-5 ${card}`}>
+            <div className="flex items-center justify-between">
+              <div><div className={`text-[10px] font-black uppercase tracking-[0.22em] ${muted}`}>TEN TYDZIEŃ</div><div className="mt-2 text-xl font-black">Rytm treningowy</div></div>
+              <Flame className={`h-5 w-5 ${primaryText}`} />
+            </div>
+            <div className="mt-5 grid grid-cols-7 gap-1.5">
+              {week.map((item) => {
+                const done = historyDays.has(item.date);
+                const planned = markedSet.has(item.date);
+                const isToday = item.date === today;
+                return (
+                  <button key={item.date} onClick={() => { setSelectedDate(item.date); setActiveTab('history'); }} className={`rounded-2xl p-2 text-center transition ${done ? 'bg-[#5b4df4] text-white' : planned ? (isDark ? 'bg-[#5b4df4]/15 text-[#a49cff]' : 'bg-[#eeecff] text-[#574be3]') : soft} ${isToday ? 'ring-2 ring-[#5b4df4]/30' : ''}`}>
+                    <div className="text-[9px] font-black uppercase opacity-70">{item.day}</div>
+                    <div className="mt-1 text-sm font-black">{item.num}</div>
+                    {done && <div className="mx-auto mt-1 h-1 w-1 rounded-full bg-white" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className={`rounded-[26px] border p-5 ${card}`}>
+          <div className="flex items-center justify-between">
+            <div><div className={`text-[10px] font-black uppercase tracking-[0.22em] ${muted}`}>SZYBKIE AKCJE</div><div className="mt-2 text-xl font-black">Co dziś robimy?</div></div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <button onClick={() => setShowPlanSheet(true)} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${card}`}>
+              <Play className={`h-5 w-5 ${primaryText}`} />
+              <div className="mt-3 font-black">Kontynuuj plan</div><div className={`mt-1 text-xs ${muted}`}>Wybierz gotowy trening</div>
+            </button>
+            <button onClick={() => { setActiveTab('stats'); setSelectedStatsExercise(''); }} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${card}`}>
+              <BarChart3 className={`h-5 w-5 ${primaryText}`} /><div className="mt-3 font-black">Sprawdź progres</div><div className={`mt-1 text-xs ${muted}`}>Siła, tonaż i rekordy</div>
+            </button>
+            <button onClick={() => setActiveTab('history')} className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${card}`}>
+              <CalendarDays className={`h-5 w-5 ${primaryText}`} /><div className="mt-3 font-black">Historia</div><div className={`mt-1 text-xs ${muted}`}>Kalendarz i zapisane treningi</div>
+            </button>
+          </div>
+        </section>
+      </div>
+    );
   };
 
-  const getSessionMetrics = () => {
-    if (!activeSession) return { totalSets: 0, completedSets: 0, volume: 0, reps: 0 };
-    let totalSets = 0;
-    let completedSets = 0;
-    let volume = 0;
-    let reps = 0;
+  const WorkoutPage = () => {
+    if (!activeSession) return null;
+    const exDone = activeSession.exercises.filter((ex) => ex.sets.length && ex.sets.every((s) => s.done)).length;
+    const category = activeExercise?.category || 'Trening';
+    return (
+      <div className="space-y-4 pb-8">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setActiveTab('home')} className={`rounded-2xl border px-3 py-2 text-xs font-black ${card}`}><ChevronLeft className="inline h-4 w-4" /> Wyjdź</button>
+          <div className={`rounded-full px-3 py-2 text-[11px] font-black ${isDark ? 'bg-[#171522] text-[#a59dff]' : 'bg-[#eeecff] text-[#5649e5]'}`}>
+            {activeSession.planName}
+          </div>
+          <button onClick={() => setShowFinishSheet(true)} className="rounded-2xl border border-red-200 px-3 py-2 text-xs font-black text-red-500">Zakończ</button>
+        </div>
 
-    activeSession.exercises.forEach(ex => {
-      ex.sets.forEach(set => {
-        totalSets += 1;
-        if (set.done) completedSets += 1;
-        const r = parseInt(set.reps) || 0;
-        const w = parseFloat(set.weight) || 0;
-        reps += r;
-        volume += r * w;
-      });
-    });
+        <section className={`rounded-[30px] border p-5 ${card}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>ĆWICZENIE {String(activeExIdx + 1).padStart(2, '0')} / {String(activeSession.exercises.length).padStart(2, '0')}</div>
+              <h1 className="mt-2 truncate text-3xl font-black tracking-[-0.04em] sm:text-4xl">{activeExercise?.name}</h1>
+              <div className={`mt-1 text-sm font-bold ${muted}`}>{category}</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${soft}`}>PR {exercisePR || 0} kg</span>
+                {previousExerciseData && <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${soft}`}>Ostatnio {previousExerciseData.sets.length} serii</span>}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${muted}`}>TONAŻ</div>
+              <div className={`mt-1 text-2xl font-black ${primaryText}`}>{formatNumber(currentExerciseVolume)} kg</div>
+            </div>
+          </div>
+          <div className="mt-5 h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/5">
+            <div className="h-full rounded-full bg-[#5b4df4] transition-all duration-300" style={{ width: `${sessionProgress}%` }} />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] font-black">
+            <span className={muted}>{exDone}/{activeSession.exercises.length} ćwiczeń</span><span className={primaryText}>{sessionProgress}%</span>
+          </div>
+        </section>
 
-    return { totalSets, completedSets, volume, reps };
+        {restSeconds > 0 && (
+          <section key={restPulse} className={`rounded-[26px] border p-5 ${isDark ? 'border-amber-400/20 bg-amber-300/5' : 'border-amber-200 bg-amber-50'}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div><div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-600">PRZERWA</div><div className="mt-1 text-4xl font-black tabular-nums">{formatDuration(restSeconds)}</div></div>
+              <div className="flex gap-2">
+                <button onClick={() => setRestSeconds((v) => v + 30)} className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-xs font-black text-amber-700">+30s</button>
+                <button onClick={() => setRestRunning((v) => !v)} className="rounded-2xl border bg-white px-4 py-3 text-amber-800"><Pause className="h-4 w-4" /></button>
+                <button onClick={() => { setRestRunning(false); setRestSeconds(0); }} className="rounded-2xl border bg-white px-4 py-3 text-amber-800"><SkipForward className="h-4 w-4" /></button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {previousExerciseData && (
+          <section className={`rounded-[26px] border p-4 ${card}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>OSTATNI WYNIK</div><div className="mt-1 text-sm font-black">{previousExerciseData.sets.map((s, i) => `${s.reps || 0} × ${s.weight || 0}`).join('  ·  ')}</div></div>
+              <button onClick={applyPrevious} className={`rounded-xl border px-3 py-2 text-[11px] font-black ${isDark ? 'border-[#6256f6]/30 bg-[#6256f6]/10 text-[#aaa4ff]' : 'border-[#d8d3ff] bg-[#f3f1ff] text-[#5144e7]'}`}><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Użyj ostatniego</button>
+            </div>
+          </section>
+        )}
+
+        <section className={`rounded-[28px] border p-4 sm:p-5 ${card}`}>
+          <div className="mb-4 flex items-end justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.22em] ${muted}`}>SERIE</div><h2 className="mt-1 text-xl font-black">Wynik każdej serii</h2></div><div className={`text-[11px] font-bold ${muted}`}>{activeExercise?.sets.length} serii</div></div>
+          <div className="space-y-3">
+            {activeExercise?.sets.map((set, index) => (
+              <div key={`${index}-${set.done}`} className={`rounded-[22px] border p-3 transition-all ${set.done ? (isDark ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-emerald-200 bg-emerald-50') : soft}`}>
+                <div className="grid grid-cols-[36px_1fr_auto] items-start gap-3">
+                  <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-black ${set.done ? 'bg-emerald-500 text-white' : (isDark ? 'bg-white/5 text-white/50' : 'bg-white text-[#667086] border border-[#e6eaf1]')}`}>{index + 1}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[0.16em] ${muted}`}>Powt.</span><input value={set.reps} onChange={(e) => updateSessionSet(activeExIdx, index, 'reps', e.target.value)} inputMode="decimal" className={`w-full rounded-2xl border px-3 py-3 text-center text-lg font-black outline-none transition focus:border-[#5b4df4] ${isDark ? 'border-white/10 bg-[#0b0c12]' : 'border-[#dfe4ec] bg-white'}`} /></label>
+                    <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[0.16em] ${muted}`}>Ciężar</span><input value={set.weight} onChange={(e) => updateSessionSet(activeExIdx, index, 'weight', e.target.value)} inputMode="decimal" className={`w-full rounded-2xl border px-3 py-3 text-center text-lg font-black outline-none transition focus:border-[#5b4df4] ${isDark ? 'border-white/10 bg-[#0b0c12]' : 'border-[#dfe4ec] bg-white'}`} /></label>
+                    <div className="col-span-2"><div className={`mb-1 text-[9px] font-black uppercase tracking-[0.16em] ${muted}`}>RPE <span className="normal-case font-bold opacity-70">opcjonalne</span></div><div className="grid grid-cols-5 gap-1.5">{[6,7,8,9,10].map((rpe) => <button key={rpe} onClick={() => updateSessionSet(activeExIdx, index, 'rpe', set.rpe === rpe ? '' : rpe)} className={`rounded-xl border py-2 text-xs font-black ${set.rpe === rpe ? 'border-[#5b4df4] bg-[#5b4df4] text-white' : isDark ? 'border-white/10 bg-black/10 text-white/55' : 'border-[#dde2ea] bg-white text-[#697489]'}`}>{rpe}</button>)}</div></div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <button onClick={() => toggleSetDone(activeExIdx, index)} className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${set.done ? 'border-emerald-500 bg-emerald-500 text-white' : isDark ? 'border-white/10 bg-[#0c0d13] text-white/45' : 'border-[#dfe4ec] bg-white text-[#748095]'}`}><Check className="h-5 w-5" /></button>
+                    <button onClick={() => removeSet(activeExIdx, index)} disabled={activeExercise.sets.length <= 1} className={`flex h-8 w-10 items-center justify-center rounded-xl text-red-400 disabled:opacity-20`}><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button onClick={() => addSet(activeExIdx, true)} className={`rounded-2xl border py-3 text-xs font-black ${card}`}><Copy className="mr-1 inline h-4 w-4" /> Kopiuj serię</button>
+            <button onClick={() => addSet(activeExIdx)} className={`rounded-2xl py-3 text-xs font-black ${primary}`}><Plus className="mr-1 inline h-4 w-4" /> Dodaj serię</button>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button disabled={activeExIdx === 0} onClick={() => setActiveExIdx((v) => Math.max(0, v - 1))} className={`rounded-2xl border py-3.5 text-xs font-black disabled:opacity-25 ${card}`}><ChevronLeft className="mr-1 inline h-4 w-4" /> Poprzednie</button>
+          <button disabled={activeExIdx === activeSession.exercises.length - 1} onClick={() => setActiveExIdx((v) => Math.min(activeSession.exercises.length - 1, v + 1))} className={`rounded-2xl border py-3.5 text-xs font-black disabled:opacity-25 ${card}`}>Następne <ChevronRight className="ml-1 inline h-4 w-4" /></button>
+        </div>
+      </div>
+    );
   };
 
-  const currentEx = activeSession?.exercises[activeExIdx];
+  const HistoryPage = () => (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><div className={`text-[10px] font-black uppercase tracking-[0.24em] ${primaryText}`}>HISTORIA</div><h1 className="mt-1 text-4xl font-black tracking-[-0.04em]">Kalendarz treningów</h1><p className={`mt-2 text-sm ${muted}`}>Kliknij dzień, żeby zobaczyć szczegóły. Dni bez historii możesz ręcznie oznaczać jako planowane.</p></div>
+        <button onClick={() => { setCalendarMonth(new Date()); setSelectedDate(today); }} className={`rounded-2xl border px-4 py-3 text-xs font-black ${card}`}>Dzisiaj</button>
+      </div>
 
-  const prevExData = currentEx
-    ? getPreviousExData(currentEx.id, currentEx.name)
-    : null;
-  const currentExPR = currentEx
-    ? getExercisePR(currentEx.id, currentEx.name)
-    : { maxWeight: 0, bestReps: 0, bestVolume: 0 };
-  const sessionMetrics = getSessionMetrics();
+      <section className={`rounded-[28px] border p-4 sm:p-5 ${card}`}>
+        <div className="flex items-center justify-between"><div><div className="text-lg font-black">{calendarMonth.toLocaleString('pl-PL',{month:'long',year:'numeric'})}</div><div className={`text-xs uppercase tracking-[0.12em] ${muted}`}>Twój rytm</div></div><div className="flex gap-1.5"><button onClick={() => setCalendarMonth((d) => new Date(d.getFullYear(), d.getMonth()-1,1))} className={`rounded-xl border p-2.5 ${card}`}><ChevronLeft className="h-4 w-4" /></button><button onClick={() => setCalendarMonth((d) => new Date(d.getFullYear(), d.getMonth()+1,1))} className={`rounded-xl border p-2.5 ${card}`}><ChevronRight className="h-4 w-4" /></button></div></div>
+        <div className={`mt-5 grid grid-cols-7 gap-2 text-center text-[10px] font-black uppercase tracking-wide ${muted}`}>{['Pn','Wt','Śr','Cz','Pt','So','Nd'].map((d) => <div key={d}>{d}</div>)}</div>
+        <div className="mt-2 grid grid-cols-7 gap-2">
+          {calendarGrid.map((day, idx) => {
+            if (!day) return <div key={`blank-${idx}`} className="aspect-square" />;
+            const date = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+            const done = historyDays.has(date); const marked = markedSet.has(date); const selected = selectedDate === date; const isToday = date === today;
+            const trainings = workoutHistory.filter((w) => w.date === date);
+            return <button key={date} onClick={() => toggleMarkedDay(date)} className={`relative flex aspect-square flex-col items-center justify-center rounded-2xl border text-sm font-black transition ${done ? 'border-transparent bg-[#5b4df4] text-white shadow-[0_8px_24px_rgba(91,77,244,0.2)]' : marked ? (isDark ? 'border-[#6459ee]/30 bg-[#6459ee]/10 text-[#b0aaff]' : 'border-[#d6d2ff] bg-[#efedff] text-[#5a4de7]') : (isDark ? 'border-white/[0.06] bg-white/[0.02] text-white/60' : 'border-[#e4e8ef] bg-[#fbfcfe] text-[#667184]')} ${selected ? 'ring-2 ring-[#5b4df4]/30' : ''}`}><span>{day}</span>{trainings.length > 0 && <span className={`mt-1 text-[8px] font-black ${done ? 'text-white/80' : primaryText}`}>{trainings.length}×</span>}{isToday && !done && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-[#5b4df4]" />}</button>;
+          })}
+        </div>
+        <div className={`mt-4 flex flex-wrap gap-4 text-[10px] font-bold ${muted}`}><span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-[#5b4df4]" /> trening</span><span><i className={`mr-1 inline-block h-2.5 w-2.5 rounded-full ${isDark ? 'bg-[#5b4df4]/20' : 'bg-[#eeecff]'}`} /> planowany</span></div>
+      </section>
 
-  const currentExCategory = currentEx
-    ? (exerciseDb.find(e => e.id === currentEx.id)?.category || 'Trening')
-    : 'Trening';
+      <section className={`rounded-[28px] border p-5 ${card}`}>
+        <div className="flex items-center justify-between border-b pb-4" style={{borderColor:isDark?'rgba(255,255,255,.06)':'#edf0f4'}}>
+          <div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>{formatDate(selectedDate, {weekday:'long'})}</div><h2 className="mt-1 text-xl font-black">{formatDate(selectedDate)}</h2></div>
+          {historyDays.has(selectedDate) && <div className={`rounded-full px-3 py-1.5 text-[10px] font-black ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>TRENING</div>}
+        </div>
+        <div className="mt-4 space-y-3">
+          {selectedDateWorkouts.length === 0 ? <div className={`rounded-2xl p-4 text-sm ${soft} ${muted}`}>{markedSet.has(selectedDate) ? 'Dzień oznaczony jako planowany. Nie ma jeszcze zapisanego treningu.' : 'Brak treningu w tym dniu.'}</div> : selectedDateWorkouts.map((w) => <div key={w.id} className={`rounded-2xl border p-4 ${soft}`}><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><div className={`text-sm font-black ${primaryText}`}>{w.planName}</div><div className={`mt-1 text-xs ${muted}`}>{w.duration} • {formatNumber(w.totalWeight)} kg • {w.totalReps || 0} powt.</div></div><button onClick={() => deleteWorkout(w.id)} className="self-end rounded-xl p-2 text-red-400 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button></div><div className="mt-3 grid gap-2">{(w.exercises || []).map((ex) => <div key={`${w.id}-${ex.id}-${ex.name}`} className={`rounded-xl border p-3 ${isDark ? 'border-white/[0.05] bg-black/10' : 'border-white bg-white'}`}><div className="flex items-center justify-between"><span className="text-xs font-black">{ex.name}</span><span className={`text-[10px] font-black ${primaryText}`}>{ex.sets.length} serii</span></div><div className={`mt-2 text-[11px] font-mono ${muted}`}>{ex.sets.map((s,i)=>`S${i+1}: ${s.reps||0}×${s.weight||0}${s.rpe ? ` RPE${s.rpe}` : ''}`).join('  ·  ')}</div></div>)}</div>{w.note && <div className={`mt-3 rounded-xl p-3 text-xs ${soft}`}><span className="font-black">Notatka:</span> {w.note}</div>}</div>)}
+        </div>
+      </section>
+    </div>
+  );
 
-  const currentExReps =
-    currentEx?.sets.reduce(
-      (acc, s) => acc + (parseInt(s.reps) || 0),
-      0
-    ) || 0;
+  const StatsPage = () => {
+    const allPRs = exerciseDb.map((ex) => {
+      let max = 0, maxReps = 0;
+      workoutHistory.forEach((w) => (w.exercises || []).forEach((e) => { if ((e.id && e.id === ex.id) || e.name === ex.name) (e.sets || []).forEach((s) => { const weight = Number(s.weight)||0; if(weight > max){max=weight; maxReps=Number(s.reps)||0;} }); }));
+      return { ...ex, max, maxReps };
+    }).filter((x)=>x.max>0).sort((a,b)=>b.max-a.max);
+    const bodyDelta = bodyStats.length > 1 ? (Number(bodyStats[0].weight||0)-Number(bodyStats[1].weight||0)) : 0;
+    return (
+      <div className="space-y-5">
+        <div><div className={`text-[10px] font-black uppercase tracking-[0.24em] ${primaryText}`}>POSTĘP</div><h1 className="mt-1 text-4xl font-black tracking-[-0.04em]">Twoja forma, liczby, progres.</h1><p className={`mt-2 text-sm ${muted}`}>Bez zbędnych ozdobników. Tylko rzeczy, które pomagają trenować mądrzej.</p></div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><StatPill icon={Trophy} label="Rekordy" value={allPRs.length} accent /><StatPill icon={Activity} label="Tonaż" value={`${formatNumber(totalVolume)} kg`} /><StatPill icon={Gauge} label="Serie" value={totalSets} /><StatPill icon={Scale} label="Waga" value={`${latestStats.weight || 0} kg`} /></div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className={`rounded-[28px] border p-5 ${card}`}>
+            <div className="flex items-center justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>REKORDY</div><h2 className="mt-1 text-xl font-black">Najlepsze wyniki</h2></div><Trophy className="h-5 w-5 text-amber-500" /></div>
+            <div className="mt-4 space-y-2">{allPRs.length ? allPRs.slice(0,7).map((ex)=><div key={ex.id} className={`flex items-center justify-between rounded-2xl p-3 ${soft}`}><div className="min-w-0"><div className="truncate text-xs font-black">{ex.name}</div><div className={`mt-0.5 text-[10px] ${muted}`}>{ex.category}</div></div><div className="text-right"><div className={`text-sm font-black ${primaryText}`}>{ex.max} kg</div><div className={`text-[10px] ${muted}`}>{ex.maxReps} powt.</div></div></div>) : <div className={`rounded-2xl p-4 text-sm ${soft} ${muted}`}>Jeszcze nie ma rekordów.</div>}</div>
+          </section>
+          <section className={`rounded-[28px] border p-5 ${card}`}>
+            <div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>ĆWICZENIE</div><h2 className="mt-1 text-xl font-black">Historia wyniku</h2></div>
+            <select value={selectedStatsExercise} onChange={(e)=>setSelectedStatsExercise(e.target.value)} className={`mt-4 w-full rounded-2xl border px-3 py-3 text-sm font-black outline-none ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`}><option value="">Wybierz ćwiczenie</option>{exerciseDb.map(ex=><option key={ex.id} value={ex.id}>{ex.name}</option>)}</select>
+            {selectedStatsExercise ? <div className="mt-4 space-y-2">{statsForExercise.length ? statsForExercise.slice(-8).reverse().map((row)=><div key={row.date} className={`flex items-center justify-between rounded-2xl p-3 ${soft}`}><div className={`text-xs font-black ${muted}`}>{formatDate(row.date)}</div><div className="text-xs font-black"><span className={primaryText}>{row.maxWeight} kg</span> <span className={muted}>• {formatNumber(row.volume)} kg</span></div></div>) : <div className={`rounded-2xl p-4 text-sm ${soft} ${muted}`}>Brak zapisów.</div>}</div> : <div className={`mt-4 rounded-2xl p-4 text-sm ${soft} ${muted}`}>Wybierz ćwiczenie, aby zobaczyć zmianę ciężaru i tonażu.</div>}
+          </section>
+        </div>
+        <section className={`rounded-[28px] border p-5 ${card}`}>
+          <div className="flex items-center justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>CIAŁO</div><h2 className="mt-1 text-xl font-black">Ostatni pomiar</h2></div><Activity className={`h-5 w-5 ${primaryText}`} /></div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5"><div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] ${muted}`}>Waga</div><div className="mt-1 font-black">{latestStats.weight || 0} kg</div></div><div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] ${muted}`}>Klatka</div><div className="mt-1 font-black">{latestStats.chest || 0} cm</div></div><div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] ${muted}`}>Ramię</div><div className="mt-1 font-black">{latestStats.arm || 0} cm</div></div><div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] ${muted}`}>Pas</div><div className="mt-1 font-black">{latestStats.waist || 0} cm</div></div><div className={`rounded-2xl p-3 ${soft}`}><div className={`text-[10px] ${muted}`}>Zmiana wagi</div><div className={`mt-1 font-black ${bodyDelta < 0 ? 'text-emerald-500' : bodyDelta > 0 ? 'text-amber-500' : ''}`}>{bodyDelta > 0 ? '+' : ''}{formatNumber(bodyDelta)} kg</div></div></div>
+        </section>
+        <section className={`rounded-[28px] border p-5 ${card}`}><form onSubmit={saveBodyMeasurement}><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>NOWY POMIAR</div><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5"><input value={newWeight} onChange={(e)=>setNewWeight(e.target.value)} placeholder="Waga" inputMode="decimal" className={`rounded-2xl border px-3 py-3 text-center text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /><input value={newChest} onChange={(e)=>setNewChest(e.target.value)} placeholder="Klatka" inputMode="decimal" className={`rounded-2xl border px-3 py-3 text-center text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /><input value={newArm} onChange={(e)=>setNewArm(e.target.value)} placeholder="Ramię" inputMode="decimal" className={`rounded-2xl border px-3 py-3 text-center text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /><input value={newWaist} onChange={(e)=>setNewWaist(e.target.value)} placeholder="Pas" inputMode="decimal" className={`rounded-2xl border px-3 py-3 text-center text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /><input value={newThigh} onChange={(e)=>setNewThigh(e.target.value)} placeholder="Udo" inputMode="decimal" className={`rounded-2xl border px-3 py-3 text-center text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /></div><button type="submit" className={`mt-3 rounded-2xl px-4 py-3 text-xs font-black ${primary}`}>Zapisz pomiar</button></form></section>
+      </div>
+    );
+  };
 
-  const currentExWeight =
-    currentEx?.sets.reduce(
-      (acc, s) =>
-        acc +
-        ((parseInt(s.reps) || 0) * (parseFloat(s.weight) || 0)),
-      0
-    ) || 0;
+  const PlansPage = () => (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.24em] ${primaryText}`}>PLANY</div><h1 className="mt-1 text-4xl font-black tracking-[-0.04em]">Treningi gotowe do odpalenia.</h1><p className={`mt-2 text-sm ${muted}`}>Dobierasz plan, naciskasz start i aplikacja prowadzi Cię przez cały trening.</p></div><button onClick={()=>setShowCreatePlan(true)} className={`rounded-2xl px-4 py-3 text-xs font-black ${primary}`}><Plus className="mr-1 inline h-4 w-4"/> Nowy plan</button></div>
+      <div className="grid gap-4 sm:grid-cols-2">{plans.map((plan) => <section key={plan.id} className={`rounded-[28px] border p-5 ${card}`}><div className="flex items-start justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${muted}`}>PLAN</div><h2 className="mt-1 text-2xl font-black">{plan.name}</h2></div><Dumbbell className={`h-5 w-5 ${primaryText}`}/></div><div className="mt-4 space-y-1.5">{plan.exerciseIds.map((id,idx)=>{const ex=exerciseDb.find(e=>e.id===id); return <div key={`${plan.id}-${id}-${idx}`} className={`flex items-center justify-between rounded-xl px-3 py-2 ${soft}`}><span className="text-xs font-bold">{idx+1}. {ex?.name || 'Ćwiczenie'}</span><span className={`text-[10px] font-black ${muted}`}>{ex?.category}</span></div>})}</div><button onClick={()=>startWorkout(plan)} className={`mt-4 w-full rounded-2xl py-3.5 text-sm font-black ${primary}`}><Play className="mr-1 inline h-4 w-4 fill-current"/> Start treningu</button></section>)}</div>
+      {showCreatePlan && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center"><form onSubmit={createPlan} className={`w-full max-w-lg rounded-[28px] border p-5 ${card}`}><div className="flex items-center justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${primaryText}`}>NOWY PLAN</div><h2 className="mt-1 text-2xl font-black">Zbuduj trening</h2></div><button type="button" onClick={()=>setShowCreatePlan(false)}><X className="h-5 w-5"/></button></div><input value={newPlanName} onChange={(e)=>setNewPlanName(e.target.value)} placeholder="Nazwa planu" className={`mt-4 w-full rounded-2xl border px-4 py-3 text-sm font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`}/><div className="mt-4 max-h-72 space-y-2 overflow-auto">{exerciseDb.map((ex)=><button type="button" key={ex.id} onClick={()=>setSelectedPlanExerciseIds((prev)=>prev.includes(ex.id)?prev.filter(id=>id!==ex.id):[...prev,ex.id])} className={`flex w-full items-center justify-between rounded-2xl border p-3 text-left ${selectedPlanExerciseIds.includes(ex.id) ? (isDark?'border-[#5b4df4]/40 bg-[#5b4df4]/10':'border-[#d5d1ff] bg-[#f1efff]') : card}`}><div><div className="text-sm font-black">{ex.name}</div><div className={`text-[10px] ${muted}`}>{ex.category}</div></div>{selectedPlanExerciseIds.includes(ex.id) ? <Check className={`h-5 w-5 ${primaryText}`}/> : <Plus className={`h-5 w-5 ${muted}`}/>}</button>)}</div><button type="submit" className={`mt-4 w-full rounded-2xl py-3.5 text-sm font-black ${primary}`}>Utwórz plan</button></form></div>}
+    </div>
+  );
 
-  // THEME
-  const isDark = theme === 'dark';
+  const ExercisesPage = () => {
+    const filtered = exerciseDb.filter((ex)=>ex.name.toLowerCase().includes(exerciseQuery.toLowerCase()) || ex.category.toLowerCase().includes(exerciseQuery.toLowerCase()));
+    return <div className="space-y-5"><div><div className={`text-[10px] font-black uppercase tracking-[0.24em] ${primaryText}`}>ĆWICZENIA</div><h1 className="mt-1 text-4xl font-black tracking-[-0.04em]">Twoja baza ruchów.</h1></div><section className={`rounded-[28px] border p-5 ${card}`}><form onSubmit={createExercise} className="grid gap-2 sm:grid-cols-[1fr_150px_auto]"><input value={newExerciseName} onChange={(e)=>setNewExerciseName(e.target.value)} placeholder="Np. Wiosłowanie hantlem" className={`rounded-2xl border px-4 py-3 text-sm font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} /><select value={newExerciseCategory} onChange={(e)=>setNewExerciseCategory(e.target.value)} className={`rounded-2xl border px-4 py-3 text-sm font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`}>{Object.keys(CATEGORY_META).map(c=><option key={c}>{c}</option>)}</select><button className={`rounded-2xl px-5 py-3 text-sm font-black ${primary}`}>Dodaj</button></form></section><div className="flex gap-2"><div className={`flex flex-1 items-center gap-2 rounded-2xl border px-4 ${card}`}><Activity className={`h-4 w-4 ${muted}`}/><input value={exerciseQuery} onChange={(e)=>setExerciseQuery(e.target.value)} placeholder="Szukaj ćwiczenia" className="w-full bg-transparent py-3 text-sm font-bold outline-none"/></div></div><section className="grid gap-2 sm:grid-cols-2">{filtered.map((ex)=><div key={ex.id} className={`flex items-center justify-between rounded-2xl border p-4 ${card}`}><div className="flex items-center gap-3"><div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${soft} ${primaryText}`}>{CATEGORY_META[ex.category]?.icon || '•'}</div><div><div className="text-sm font-black">{ex.name}</div><div className={`mt-0.5 text-[10px] font-bold ${muted}`}>{ex.category}</div></div></div><button onClick={()=>setExerciseDb((prev)=>prev.filter(e=>e.id!==ex.id))} className={`rounded-xl p-2 ${muted}`}><Trash2 className="h-4 w-4"/></button></div>)}</section></div>;
+  };
 
-  const bgMain = isDark
-    ? 'bg-neutral-950 text-white'
-    : 'bg-slate-50 text-slate-900';
+  const SettingsPage = () => (
+    <div className="space-y-5"><div><div className={`text-[10px] font-black uppercase tracking-[0.24em] ${primaryText}`}>USTAWIENIA</div><h1 className="mt-1 text-4xl font-black tracking-[-0.04em]">Dopasuj aplikację do siebie.</h1></div><section className={`rounded-[28px] border p-5 ${card}`}><div className="flex items-center justify-between"><div><div className="text-sm font-black">Wygląd</div><div className={`mt-1 text-xs ${muted}`}>Light / Dark</div></div><button onClick={()=>setTheme(isDark?'light':'dark')} className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-xs font-black ${card}`}>{isDark?<Sun className="h-4 w-4"/>:<Moon className="h-4 w-4"/>}{isDark?'Jasny':'Ciemny'}</button></div><div className="mt-5 flex items-center justify-between border-t pt-5" style={{borderColor:isDark?'rgba(255,255,255,.06)':'#edf0f4'}}><div><div className="text-sm font-black">Domyślna przerwa</div><div className={`mt-1 text-xs ${muted}`}>Automatycznie startuje po zaliczeniu serii.</div></div><select value={settings.defaultRest} onChange={(e)=>setSettings((s)=>({...s,defaultRest:Number(e.target.value)}))} className={`rounded-2xl border px-3 py-3 text-xs font-black ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`}><option value={45}>45 s</option><option value={60}>60 s</option><option value={75}>75 s</option><option value={90}>90 s</option><option value={120}>120 s</option><option value={150}>150 s</option></select></div><div className="mt-5 flex items-center justify-between border-t pt-5" style={{borderColor:isDark?'rgba(255,255,255,.06)':'#edf0f4'}}><div><div className="text-sm font-black">Wibracje</div><div className={`mt-1 text-xs ${muted}`}>Delikatne powiadomienie po końcu przerwy.</div></div><button onClick={()=>setSettings((s)=>({...s,vibration:!s.vibration}))} className={`relative h-7 w-12 rounded-full transition ${settings.vibration?'bg-[#5b4df4]':'bg-black/10 dark:bg-white/10'}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${settings.vibration?'left-6':'left-1'}`}/></button></div></section><section className={`rounded-[28px] border p-5 ${card}`}><div className="flex items-center gap-2"><RefreshCcw className={`h-5 w-5 ${primaryText}`}/><div><div className="text-sm font-black">Twoje dane</div><div className={`mt-1 text-xs ${muted}`}>Backup i przywracanie bez chmury.</div></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><button onClick={exportData} className={`rounded-2xl border py-3 text-xs font-black ${card}`}><Download className="mr-1 inline h-4 w-4"/> Eksportuj backup</button><button onClick={()=>importRef.current?.click()} className={`rounded-2xl border py-3 text-xs font-black ${card}`}><Upload className="mr-1 inline h-4 w-4"/> Przywróć backup</button></div><input ref={importRef} type="file" accept="application/json" onChange={importData} className="hidden"/><div className={`mt-3 rounded-2xl p-3 text-[11px] ${soft} ${muted}`}>Backup zawiera treningi, plany, ćwiczenia, pomiary i ustawienia.</div></section></div>
+  );
 
-  const bgCard = isDark
-    ? 'bg-neutral-900/90 border-neutral-800'
-    : 'bg-white border-slate-200 shadow-sm';
+  const PlanSheet = () => showPlanSheet && (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center">
+      <div className={`w-full max-w-xl rounded-[30px] border p-5 ${card}`}>
+        <div className="flex items-center justify-between"><div><div className={`text-[10px] font-black uppercase tracking-[0.2em] ${primaryText}`}>START</div><h2 className="mt-1 text-2xl font-black">Wybierz trening</h2></div><button onClick={()=>setShowPlanSheet(false)}><X className="h-5 w-5"/></button></div>
+        <div className="mt-4 grid gap-2">{plans.map((p)=><button key={p.id} onClick={()=>startWorkout(p)} className={`flex items-center justify-between rounded-2xl border p-4 text-left ${card}`}><div><div className="text-sm font-black">{p.name}</div><div className={`mt-1 text-xs ${muted}`}>{p.exerciseIds.length} ćwiczeń</div></div><Play className={`h-5 w-5 ${primaryText} fill-current`}/></button>)}</div>
+        <button onClick={startQuickWorkout} className={`mt-3 w-full rounded-2xl border py-3.5 text-sm font-black ${card}`}><PlusCircle className={`mr-1 inline h-4 w-4 ${primaryText}`}/> Pusty / szybki trening</button>
+      </div>
+    </div>
+  );
 
-  const bgInput = isDark
-    ? 'bg-neutral-950 border-neutral-800 text-white'
-    : 'bg-slate-100 border-slate-300 text-slate-900';
+  const FinishSheet = () => showFinishSheet && (
+    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm sm:items-center">
+      <div className={`w-full max-w-md rounded-[30px] border p-5 ${card}`}>
+        <div className="flex items-center justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">PODSUMOWANIE</div><h2 className="mt-1 text-2xl font-black">Kończymy?</h2></div><button onClick={()=>setShowFinishSheet(false)}><X className="h-5 w-5"/></button></div>
+        <div className="mt-4 grid grid-cols-3 gap-2"><div className={`rounded-2xl p-3 text-center ${soft}`}><div className={`text-[9px] uppercase font-black ${muted}`}>Czas</div><div className="mt-1 font-black">{formatDuration(sessionSeconds)}</div></div><div className={`rounded-2xl p-3 text-center ${soft}`}><div className={`text-[9px] uppercase font-black ${muted}`}>Serie</div><div className="mt-1 font-black">{activeSession?.exercises.reduce((s,e)=>s+e.sets.filter(x=>x.done).length,0) || 0}</div></div><div className={`rounded-2xl p-3 text-center ${soft}`}><div className={`text-[9px] uppercase font-black ${muted}`}>Tonaż</div><div className={`mt-1 font-black ${primaryText}`}>{formatNumber(activeSession?.exercises.reduce((s,e)=>s+e.sets.reduce((x,z)=>x+(Number(z.weight)||0)*(Number(z.reps)||0),0),0)||0)} kg</div></div></div>
+        <textarea value={finishNote} onChange={(e)=>setFinishNote(e.target.value)} placeholder="Notatka z treningu (opcjonalnie)" className={`mt-4 min-h-24 w-full resize-none rounded-2xl border p-3 text-sm font-bold outline-none ${isDark?'border-white/10 bg-[#0b0c12]':'border-[#dfe4ec] bg-white'}`} />
+        <button onClick={finishWorkout} className="mt-3 w-full rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white">Zapisz trening</button>
+      </div>
+    </div>
+  );
 
-  const textMuted = isDark
-    ? 'text-neutral-400'
-    : 'text-slate-500';
-
-  const accentText = isDark
-    ? 'text-violet-400'
-    : 'text-indigo-600';
-
-  const accentBg = isDark
-    ? 'bg-violet-500 text-white hover:bg-violet-400'
-    : 'bg-indigo-600 text-white hover:bg-indigo-700';
-
-  const historyForSelectedDate = selectedHistoryDate
-    ? workoutHistory.filter(w => w.date === selectedHistoryDate)
-    : [];
-
-  const latestStats = bodyStats[0] || {};
+  const Toast = () => toast && <div className="fixed bottom-24 left-1/2 z-[120] -translate-x-1/2 rounded-full border border-white/10 bg-[#11131b]/95 px-4 py-3 text-xs font-black text-white shadow-2xl backdrop-blur-xl">{toast.message}</div>;
 
   return (
-    <div className={`min-h-screen ${bgMain} flex flex-col font-sans transition-colors duration-200 relative`}>
-
-      {/* SPLASH SCREEN */}
-      {showSplash && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-neutral-950 text-white p-6 text-center">
-
-          <div className="relative mb-5">
-            <div className="absolute inset-0 rounded-3xl bg-violet-500/20 blur-2xl scale-110" />
-
-            <img
-              src="/logo.png"
-              alt="Pakiernia U Matiego"
-              className="relative w-44 h-44 object-cover rounded-3xl border-2 border-violet-400 shadow-2xl shadow-violet-500/30"
-              onError={(e) => {
-                e.currentTarget.style.opacity = '0';
-              }}
-            />
-          </div>
-
-          <h1 className="text-xl font-black uppercase tracking-[0.18em] bg-gradient-to-r from-violet-400 via-indigo-400 to-blue-400 bg-clip-text text-transparent">
-            PAKIERNIA U MATIEGO
-          </h1>
-
-          <div className="w-64 max-w-xs mt-8 space-y-3">
-
-            <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-wider text-neutral-400">
-              <span className="flex items-center space-x-1.5">
-                <Zap className="h-3 w-3 text-violet-400 animate-pulse" />
-                <span>
-                  {loadingProgress < 100
-                    ? 'Ładowanie formy...'
-                    : 'Gotowe!'}
-                </span>
-              </span>
-
-              <span className="text-violet-400 font-bold">
-                {loadingProgress}%
-              </span>
-            </div>
-
-            <div className="h-2.5 w-full bg-neutral-800 rounded-full overflow-hidden border border-neutral-700">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-400 shadow-lg shadow-violet-500/30 transition-all duration-150 ease-out"
-                style={{ width: `${loadingProgress}%` }}
-              />
-            </div>
-
-            <div className="text-[9px] text-neutral-600 font-mono">
-              SYSTEM TRENINGOWY • PAKIERNIA
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <header className={`p-4 border-b ${
-        isDark
-          ? 'bg-neutral-900 border-neutral-800'
-          : 'bg-white border-slate-200'
-      } sticky top-0 z-10 flex justify-between items-center`}>
-
-        <div className="flex items-center space-x-2">
-          <Dumbbell className={`h-6 w-6 ${accentText}`} />
-
-          <h1 className="text-lg font-black tracking-wider uppercase">
-            PAKIERNIA{' '}
-            <span className={accentText}>
-              U MATIEGO
-            </span>
-          </h1>
-        </div>
-
-        {activeSession && (
-          <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold ${
-            isDark
-              ? 'bg-violet-950 text-violet-400 border border-violet-500/30'
-              : 'bg-violet-50 text-violet-700 border border-violet-200'
-          }`}>
-            <Timer className="h-3.5 w-3.5" />
-            <span>{formatTime(timerSeconds)}</span>
-          </div>
-        )}
-      </header>
-
-      {/* MAIN */}
-      <main className="flex-1 p-4 sm:p-5 max-w-lg w-full mx-auto pb-32">
-
-        {/* ACTIVE WORKOUT - CLEAN MOBILE UX */}
-        {activeSession ? (
-          <div className="space-y-4">
-
-            {/* EXERCISE HEADER */}
-            <div className={`rounded-[28px] border p-4 ${bgCard} shadow-sm overflow-hidden`}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${textMuted}`}>
-                    Ćwiczenie {String(activeExIdx + 1).padStart(2, '0')} / {String(activeSession.exercises.length).padStart(2, '0')}
-                  </div>
-                  <h2 className="text-2xl font-black tracking-tight mt-1">
-                    <span className={accentText}>{currentEx?.name}</span>
-                  </h2>
-                  <div className={`text-xs font-semibold mt-1 ${textMuted}`}>
-                    {currentExCategory}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'}`}>
-                      <Award className="h-3 w-3" /> PR {currentExPR.maxWeight > 0 ? `${currentExPR.maxWeight} kg` : '—'}
-                    </span>
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black ${isDark ? 'bg-neutral-800 text-neutral-300' : 'bg-slate-100 text-slate-600'}`}>
-                      Ostatnio {prevExData ? prevExData.sets.length : 0} serii
-                    </span>
-                  </div>
-                </div>
-                <div className={`shrink-0 px-3 py-2 rounded-2xl text-xs font-black ${isDark ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
-                  {currentExReps} powt.
-                </div>
-              </div>
-
-              <div className="flex items-center justify-center gap-2 mt-4">
-                {activeSession.exercises.map((exercise, idx) => {
-                  const exerciseDone = exercise.sets.length > 0 && exercise.sets.every(set => set.done);
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveExIdx(idx)}
-                      aria-label={`Ćwiczenie ${idx + 1}`}
-                      className={`h-2 rounded-full transition-all ${
-                        idx === activeExIdx
-                          ? 'w-9 bg-violet-500 shadow-md shadow-violet-500/30'
-                          : exerciseDone
-                            ? 'w-2 bg-emerald-500'
-                            : isDark ? 'w-2 bg-neutral-700' : 'w-2 bg-slate-300'
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`rounded-3xl border p-3.5 ${isDark ? 'bg-neutral-900/70 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${textMuted}`}>Postęp treningu</div>
-                  <div className="text-sm font-black mt-0.5">{sessionMetrics.completedSets} / {sessionMetrics.totalSets} serii</div>
-                </div>
-                <div className={`text-xs font-black ${accentText}`}>{sessionMetrics.totalSets ? Math.round((sessionMetrics.completedSets / sessionMetrics.totalSets) * 100) : 0}%</div>
-              </div>
-              <div className={`h-2 rounded-full mt-2 overflow-hidden ${isDark ? 'bg-neutral-800' : 'bg-slate-100'}`}>
-                <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-300" style={{ width: `${sessionMetrics.totalSets ? (sessionMetrics.completedSets / sessionMetrics.totalSets) * 100 : 0}%` }} />
-              </div>
-            </div>
-
-            {restSeconds > 0 && (
-              <div className={`rounded-3xl border p-4 ${isDark ? 'bg-amber-950/30 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Przerwa</div>
-                    <div className="text-3xl font-black font-mono mt-1 tabular-nums">{formatTime(restSeconds)}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setRestSeconds(prev => prev + 30)} className={`px-3 py-2 rounded-xl text-[11px] font-black border ${isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-amber-200 bg-white text-amber-700'}`}>+30s</button>
-                    <button onClick={() => setRestRunning(prev => !prev)} className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'border-neutral-700 bg-neutral-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}>
-                      {restRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
-                    </button>
-                    <button onClick={skipRestTimer} className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'border-neutral-700 bg-neutral-900 text-white' : 'border-slate-200 bg-white text-slate-700'}`}><SkipForward className="h-4 w-4" /></button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* LAST RESULT — QUICK ACTION */}
-            <div className={`rounded-3xl border p-4 ${isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${accentText}`}>
-                    Ostatni wynik
-                  </div>
-                  {prevExData ? (
-                    <div className={`mt-1 text-sm font-black truncate ${textMuted}`}>
-                      {prevExData.sets
-                        .map(s => `${s.reps || 0} × ${s.weight || 0} kg`)
-                        .join('  ·  ')}
-                    </div>
-                  ) : (
-                    <div className={`mt-1 text-xs font-semibold ${textMuted}`}>
-                      Brak poprzedniego zapisu — zacznij od bazowych serii.
-                    </div>
-                  )}
-                </div>
-
-                {prevExData && (
-                  <button
-                    onClick={() => fillFromPreviousWorkout(activeExIdx)}
-                    className={`shrink-0 px-3 py-2 rounded-xl text-[11px] font-black border transition-all active:scale-95 ${
-                      isDark
-                        ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                        : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                    }`}
-                    title="Przenieś ostatnie serie do bieżącego treningu"
-                  >
-                    Użyj ostatniego
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* ACTIVE EXERCISE CARD */}
-            <div className={`rounded-3xl border p-4 ${bgCard} shadow-sm`}>
-              <div className="flex items-end justify-between mb-4">
-                <div>
-                  <div className={`text-[10px] font-black uppercase tracking-[0.16em] ${textMuted}`}>Serie</div>
-                  <div className="text-lg font-black mt-0.5">Wpisz wynik każdej serii</div>
-                </div>
-                <div className={`text-right ${textMuted}`}>
-                  <div className="text-[10px] uppercase font-bold">Tonaż</div>
-                  <div className={`text-sm font-black ${accentText}`}>{currentExWeight} kg</div>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                {currentEx?.sets.map((set, sIdx) => (
-                  <div
-                    key={sIdx}
-                    className={`rounded-2xl border p-2.5 transition-all ${
-                      set.done
-                        ? isDark ? 'bg-emerald-950/25 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'
-                        : isDark ? 'bg-neutral-950/60 border-neutral-800' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${set.done ? 'bg-emerald-500 text-white' : isDark ? 'bg-neutral-800 text-neutral-400' : 'bg-white text-slate-500 border border-slate-200'}`}>
-                        {sIdx + 1}
-                      </div>
-
-                      <div className="flex-1 grid grid-cols-2 gap-2">
-                        <div>
-                          <label className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${textMuted}`}>Powtórzenia</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={set.reps}
-                            onChange={(e) => updateSet(activeExIdx, sIdx, 'reps', e.target.value)}
-                            className={`w-full border rounded-xl px-2.5 py-2.5 text-center font-black text-base focus:border-violet-500 focus:outline-none ${bgInput}`}
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${textMuted}`}>Ciężar (kg)</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={set.weight}
-                            onChange={(e) => updateSet(activeExIdx, sIdx, 'weight', e.target.value)}
-                            className={`w-full border rounded-xl px-2.5 py-2.5 text-center font-black text-base focus:border-violet-500 focus:outline-none ${bgInput}`}
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <label className={`block text-[9px] font-black uppercase tracking-wider ${textMuted}`}>RPE</label>
-                            <span className={`text-[9px] font-black ${textMuted}`}>{set.rpe ? `Wysiłek ${set.rpe}/10` : 'opcjonalne'}</span>
-                          </div>
-                          <div className="grid grid-cols-5 gap-1">
-                            {[6, 7, 8, 9, 10].map(value => (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => updateSet(activeExIdx, sIdx, 'rpe', String(value))}
-                                className={`py-1.5 rounded-lg text-[10px] font-black border transition-all ${String(set.rpe) === String(value) ? 'bg-violet-500 text-white border-violet-500' : isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-400' : 'bg-white border-slate-200 text-slate-500'}`}
-                              >{value}</button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1 shrink-0">
-                        <button
-                          onClick={() => toggleSetDone(activeExIdx, sIdx)}
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${set.done ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : isDark ? 'bg-neutral-800 text-neutral-500 hover:text-emerald-400' : 'bg-white border border-slate-200 text-slate-400 hover:text-emerald-500'}`}
-                          title="Oznacz serię jako wykonaną"
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                        </button>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => copyPreviousSet(activeExIdx, sIdx)}
-                            disabled={sIdx === 0}
-                            className={`w-4 h-5 flex items-center justify-center ${textMuted} hover:text-violet-500 disabled:opacity-20`}
-                            title="Kopiuj poprzednią serię"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteSpecificSet(activeExIdx, sIdx)}
-                            disabled={currentEx.sets.length <= 1}
-                            className={`w-4 h-5 flex items-center justify-center ${textMuted} hover:text-red-500 disabled:opacity-20`}
-                            title="Usuń serię"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {set.done && (
-                      <div className="mt-2 pl-10 text-[10px] font-black text-emerald-500 uppercase tracking-wider">
-                        ✓ Seria wykonana
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={() => addSet(activeExIdx)}
-                className={`w-full mt-3 py-3 ${accentBg} font-black rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-violet-500/10 active:scale-[0.98] transition-all`}
-              >
-                <Plus className="h-4 w-4" />
-                <span>Dodaj serię</span>
-              </button>
-
-              {currentEx?.sets.length > 1 && (
-                <button
-                  onClick={() => removeSet(activeExIdx)}
-                  className={`w-full mt-2 py-2 text-[11px] font-bold ${textMuted} hover:text-red-500 transition-colors`}
-                >
-                  Usuń ostatnią serię
-                </button>
-              )}
-            </div>
-
-            {/* BOTTOM EXERCISE NAVIGATION */}
-            <div className="flex gap-2">
-              <button
-                disabled={activeExIdx === 0}
-                onClick={() => setActiveExIdx(prev => Math.max(0, prev - 1))}
-                className={`flex-1 py-3.5 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Poprzednie</span>
-              </button>
-              <button
-                disabled={activeExIdx === activeSession.exercises.length - 1}
-                onClick={() => setActiveExIdx(prev => Math.min(activeSession.exercises.length - 1, prev + 1))}
-                className={`flex-1 py-3.5 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 transition-all disabled:opacity-30 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-300' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
-              >
-                <span>Następne</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* FINISH */}
-            <div className="flex items-center justify-between gap-3 pt-1 pb-2">
-              <button
-                onClick={() => setActiveSession(null)}
-                className="text-xs font-black text-red-500 px-2 py-2 hover:underline"
-              >
-                Anuluj trening
-              </button>
-              <button
-                onClick={finishWorkout}
-                className="flex-1 max-w-[230px] bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all"
-              >
-                <CheckCircle className="h-4 w-4" />
-                <span>ZAKOŃCZ TRENING</span>
-              </button>
-            </div>
-          </div>
-
-        ) : (
-
-          <>
-            {/* START */}
-            {activeTab === 'start' && (
-              <div className="space-y-6">
-
-                <div className="space-y-3">
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${accentText}`}>
-                        Dashboard
-                      </div>
-                      <h2 className="text-2xl font-black tracking-tight mt-1">
-                        Gotowy na kolejny trening?
-                      </h2>
-                    </div>
-                    <div className={`px-2.5 py-1.5 rounded-full text-[10px] font-black ${isDark ? 'bg-orange-500/10 text-orange-300' : 'bg-orange-50 text-orange-600'}`}>
-                      <span className="inline-flex items-center gap-1">
-                        <Flame className="h-3 w-3" /> {getCurrentStreak()} dni
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
-                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>W tym miesiącu</div>
-                      <div className="text-xl font-black mt-1">{getWorkoutCountForMonth()}</div>
-                    </div>
-                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
-                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>Łącznie</div>
-                      <div className="text-xl font-black mt-1">{workoutHistory.length}</div>
-                    </div>
-                    <div className={`rounded-2xl border p-3 ${bgCard}`}>
-                      <div className={`text-[9px] uppercase font-black ${textMuted}`}>Ostatni</div>
-                      <div className={`text-sm font-black mt-2 truncate ${accentText}`}>
-                        {workoutHistory[0] ? formatDate(workoutHistory[0].date) : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {workoutHistory.length > 0 && (
-                    <div className={`p-4 rounded-2xl border ${bgCard}`}>
-                      <div className="flex justify-between items-center gap-3">
-                        <div className="min-w-0">
-                          <div className={`text-[9px] uppercase font-black ${textMuted}`}>Ostatni trening</div>
-                          <div className="font-black text-sm mt-1 truncate">{workoutHistory[0].planName}</div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className={`text-xs font-black ${accentText}`}>{workoutHistory[0].totalWeight} kg</div>
-                          <div className={`text-[10px] ${textMuted}`}>{workoutHistory[0].totalReps} powt.</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setShowStartModal(true)}
-                  className={`w-full py-4 ${accentBg} font-black tracking-wider uppercase rounded-2xl shadow-xl shadow-violet-500/10 text-center transition-transform active:scale-95 flex items-center justify-center space-x-2 text-base`}
-                >
-                  <Play className="h-5 w-5 fill-current" />
-                  <span>ROZPOCZNIJ</span>
-                  </button>
-                  <button
-                    onClick={startQuickWorkout}
-                    className={`py-4 rounded-2xl border font-black text-[11px] tracking-wider uppercase flex items-center justify-center gap-2 transition-all active:scale-95 ${isDark ? 'bg-neutral-900 border-neutral-800 text-neutral-200 hover:bg-neutral-800' : 'bg-white border-slate-200 text-slate-700 shadow-sm hover:bg-slate-50'}`}
-                  >
-                    <PlusCircle className="h-4 w-4" />
-                    SZYBKI
-                  </button>
-                </div>
-
-              </div>
-            )}
-
-            {/* HISTORY */}
-            {activeTab === 'history' && (
-              <div className="space-y-4">
-
-                <div>
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
-                      <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${accentText}`}>Historia</div>
-                      <h2 className="text-2xl font-black tracking-tight mt-1">Kalendarz treningów</h2>
-                    </div>
-                    <button
-                      onClick={goToToday}
-                      className={`px-3 py-2 rounded-xl text-[10px] font-black border transition-all ${
-                        isDark
-                          ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      Dzisiaj
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className={`h-2 w-2 rounded-full ${isDark ? 'bg-violet-500' : 'bg-indigo-600'}`} />
-                    <span className={`text-xs font-semibold ${textMuted}`}>
-                      Kliknij dzień, aby zaznaczyć / odznaczyć trening i zobaczyć szczegóły.
-                    </span>
-                  </div>
-                </div>
-
-                <div className={`border rounded-xl p-4 space-y-4 ${bgCard}`}>
-
-                  <div className="flex justify-between items-center">
-
-                    <h3 className="font-bold text-sm">
-                      {currentDate
-                        .toLocaleString('pl-PL', {
-                          month: 'long',
-                          year: 'numeric'
-                        })
-                        .toUpperCase()}
-                    </h3>
-
-                    <div className="flex space-x-1">
-
-                      <button
-                        onClick={() =>
-                          setCurrentDate(
-                            new Date(
-                              currentDate.getFullYear(),
-                              currentDate.getMonth() - 1,
-                              1
-                            )
-                          )
-                        }
-                        className={`p-1.5 rounded-lg border ${
-                          isDark
-                            ? 'border-neutral-800 bg-neutral-950'
-                            : 'border-slate-300 bg-slate-50'
-                        }`}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setCurrentDate(
-                            new Date(
-                              currentDate.getFullYear(),
-                              currentDate.getMonth() + 1,
-                              1
-                            )
-                          )
-                        }
-                        className={`p-1.5 rounded-lg border ${
-                          isDark
-                            ? 'border-neutral-800 bg-neutral-950'
-                            : 'border-slate-300 bg-slate-50'
-                        }`}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-
-                    </div>
-                  </div>
-
-                  <div className={`grid grid-cols-7 gap-1 text-center font-bold text-xs ${textMuted}`}>
-                    <div>Pn</div>
-                    <div>Wt</div>
-                    <div>Śr</div>
-                    <div>Cz</div>
-                    <div>Pt</div>
-                    <div>So</div>
-                    <div>Nd</div>
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-1">
-
-                    {Array.from({
-                      length:
-                        (new Date(
-                          currentDate.getFullYear(),
-                          currentDate.getMonth(),
-                          1
-                        ).getDay() || 7) - 1
-                    }).map((_, i) => (
-                      <div
-                        key={`empty-${i}`}
-                        className="h-9"
-                      />
-                    ))}
-
-                    {Array.from({
-                      length: new Date(
-                        currentDate.getFullYear(),
-                        currentDate.getMonth() + 1,
-                        0
-                      ).getDate()
-                    }).map((_, i) => {
-
-                      const dayNum = i + 1;
-
-                      const dateStr = `${currentDate.getFullYear()}-${String(
-                        currentDate.getMonth() + 1
-                      ).padStart(2, '0')}-${String(dayNum).padStart(
-                        2,
-                        '0'
-                      )}`;
-
-                      const hasWorkout = workoutHistory.some(w => w.date === dateStr);
-                      const isMarked = markedDays.includes(dateStr);
-                      const isSelected = selectedHistoryDate === dateStr;
-                      const isToday = dateStr === getLocalDateString();
-
-                      return (
-                        <button
-                          key={dayNum}
-                          onClick={() => {
-                            toggleDayMark(dateStr);
-                            setSelectedHistoryDate(dateStr);
-                          }}
-                          aria-pressed={isMarked}
-                          className={`relative h-11 rounded-2xl font-black text-xs flex flex-col items-center justify-center transition-all active:scale-95 ${
-                            isMarked
-                              ? `${accentBg} shadow-md shadow-violet-500/15`
-                              : isDark
-                                ? 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800 border border-neutral-800'
-                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
-                          } ${isSelected ? 'ring-2 ring-violet-400 ring-offset-2 ' + (isDark ? 'ring-offset-neutral-900' : 'ring-offset-white') : ''}`}
-                        >
-                          <span>{dayNum}</span>
-                          {isToday && !isMarked && (
-                            <span className={`absolute bottom-1 h-1 w-1 rounded-full ${isDark ? 'bg-violet-400' : 'bg-indigo-600'}`} />
-                          )}
-                          {isMarked && hasWorkout && (
-                            <span className="absolute bottom-1 h-1 w-1 rounded-full bg-white/90" />
-                          )}
-                          {dayNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {selectedHistoryDate && (
-                  <div className={`border rounded-3xl p-4 space-y-4 ${bgCard} shadow-sm`}>
-
-                    <div className="flex justify-between items-center border-b pb-2 dark:border-neutral-800 border-slate-200">
-
-                      <h3 className="font-bold text-sm">
-                        Trening z dnia {formatDate(selectedHistoryDate)}
-                      </h3>
-
-                      <button
-                        onClick={() => setSelectedHistoryDate(null)}
-                      >
-                        <X className="h-4 w-4 text-slate-400" />
-                      </button>
-
-                    </div>
-
-                    {historyForSelectedDate.length > 0 ? (
-                      historyForSelectedDate.map(h => (
-                        <div
-                          key={h.id}
-                          className="space-y-3 relative"
-                        >
-
-                          <div className="flex justify-between items-center pr-8">
-
-                            <span className={`font-black text-sm ${accentText}`}>
-                              {h.planName}
-                            </span>
-
-                            <span className={`text-xs font-mono ${textMuted}`}>
-                              {h.duration} | Tonaż: {h.totalWeight} kg
-                            </span>
-
-                          </div>
-
-                          <button
-                            onClick={() =>
-                              deleteWorkoutHistory(h.id)
-                            }
-                            className="absolute top-0 right-0 text-slate-400 hover:text-red-500 p-1"
-                            title="Usuń trening z historii"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-
-                          <div className="space-y-2 pt-1">
-
-                            {h.exercises.map((e, idx) => (
-                              <div
-                                key={idx}
-                                className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-                                  isDark
-                                    ? 'bg-neutral-950/80 border-neutral-800'
-                                    : 'bg-slate-50 border-slate-200'
-                                }`}
-                              >
-
-                                <div className="flex justify-between items-center">
-
-                                  <span className="font-bold text-xs">
-                                    {e.name}
-                                  </span>
-
-                                  <span className="text-[10px] text-violet-500 font-mono">
-                                    {e.sets.length} serie
-                                  </span>
-
-                                </div>
-
-                                <div className="flex flex-wrap gap-1.5 pt-1">
-
-                                  {e.sets.map((s, sIdx) => (
-                                    <span
-                                      key={sIdx}
-                                      className={`px-2 py-1 rounded-md text-[11px] font-mono border ${
-                                        isDark
-                                          ? 'bg-neutral-900 border-neutral-700 text-violet-300'
-                                          : 'bg-white border-slate-300 text-violet-900'
-                                      }`}
-                                    >
-                                      S{sIdx + 1}:{' '}
-                                      <strong>{s.reps || 0}</strong>{' '}
-                                      powt. ×{' '}
-                                      <strong>{s.weight || 0}</strong>{' '}
-                                      kg
-                                    </span>
-                                  ))}
-
-                                </div>
-                              </div>
-                            ))}
-
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className={`text-xs ${textMuted}`}>
-                        Brak zapisanego treningu w tym dniu.
-                      </p>
-                    )}
-
-                  </div>
-                )}
-
-              </div>
-            )}
-
-            {/* STATS */}
-            {activeTab === 'stats' && (
-              <div className="space-y-4">
-
-                <div className={`p-1 rounded-xl border flex text-xs font-bold ${
-                  isDark
-                    ? 'bg-neutral-900 border-neutral-800'
-                    : 'bg-slate-200 border-slate-300'
-                }`}>
-
-                  <button
-                    onClick={() => setStatsSubTab('records')}
-                    className={`flex-1 py-2 rounded-lg text-center transition-all ${
-                      statsSubTab === 'records'
-                        ? accentBg
-                        : textMuted
-                    }`}
-                  >
-                    Rekordy PR
-                  </button>
-
-                  <button
-                    onClick={() => setStatsSubTab('body')}
-                    className={`flex-1 py-2 rounded-lg text-center transition-all ${
-                      statsSubTab === 'body'
-                        ? accentBg
-                        : textMuted
-                    }`}
-                  >
-                    Pomiary Ciała
-                  </button>
-
-                  <button
-                    onClick={() => setStatsSubTab('history')}
-                    className={`flex-1 py-2 rounded-lg text-center transition-all ${
-                      statsSubTab === 'history'
-                        ? accentBg
-                        : textMuted
-                    }`}
-                  >
-                    Ćwiczenia
-                  </button>
-
-                </div>
-
-                {/* RECORDS */}
-                {statsSubTab === 'records' && (
-                  <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-
-                    <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                      <Trophy className="h-4 w-4 text-amber-500" />
-                      <span>Rekordy Życiowe (Max Ciężar)</span>
-                    </h3>
-
-                    <div className="space-y-2">
-
-                      {exerciseDb.map(ex => {
-
-                        let maxWeight = 0;
-                        let bestReps = 0;
-
-                        workoutHistory.forEach(w => {
-
-                          const found = w.exercises.find(
-                            e =>
-                              (e.id && e.id === ex.id) ||
-                              e.name === ex.name
-                          );
-
-                          if (found) {
-                            found.sets.forEach(s => {
-
-                              const wVal =
-                                parseFloat(s.weight) || 0;
-
-                              const rVal =
-                                parseInt(s.reps) || 0;
-
-                              if (wVal > maxWeight) {
-                                maxWeight = wVal;
-                                bestReps = rVal;
-                              }
-                            });
-                          }
-                        });
-
-                        return (
-                          <div
-                            key={ex.id}
-                            className="flex justify-between items-center text-xs py-1.5 border-b border-slate-100 dark:border-neutral-800 last:border-0"
-                          >
-                            <span className="font-semibold">
-                              {ex.name}
-                            </span>
-
-                            <span className={`font-bold font-mono ${
-                              maxWeight > 0
-                                ? accentText
-                                : textMuted
-                            }`}>
-                              {maxWeight > 0
-                                ? `${maxWeight} kg (${bestReps} powt.)`
-                                : 'Brak danych'}
-                            </span>
-                          </div>
-                        );
-                      })}
-
-                    </div>
-                  </div>
-                )}
-
-                {/* BODY */}
-                {statsSubTab === 'body' && (
-                  <div className="space-y-4">
-
-                    <div className={`p-4 rounded-2xl border space-y-4 ${bgCard}`}>
-
-                      <div className="flex justify-between items-center">
-
-                        <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                          <Activity className={`h-4 w-4 ${accentText}`} />
-                          <span>Anatomia Formy & Wyniki</span>
-                        </h3>
-
-                        <span className={`text-[10px] font-mono ${textMuted}`}>
-                          Data: {latestStats.date
-                            ? formatDate(latestStats.date)
-                            : 'Brak'}
-                        </span>
-
-                      </div>
-
-                      {/* REALISTIC BODY IMAGE */}
-                      <div className={`relative w-full h-80 rounded-2xl border flex items-center justify-between p-4 overflow-hidden ${
-                        isDark
-                          ? 'bg-neutral-950 border-neutral-800'
-                          : 'bg-slate-100 border-slate-200'
-                      }`}>
-
-                        <div className="absolute left-[22%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-64 bg-violet-500/10 blur-3xl rounded-full" />
-
-                        <div className="relative w-[52%] h-full flex items-center justify-center">
-
-                          <img
-                            src="/body.png"
-                            alt="Sylwetka człowieka"
-                            className={`h-full w-auto max-w-full object-contain ${
-                              isDark
-                                ? 'drop-shadow-[0_0_18px_rgba(139,92,246,0.25)]'
-                                : 'drop-shadow-[0_5px_15px_rgba(79,70,229,0.15)]'
-                            }`}
-                            onError={(e) => {
-                              e.currentTarget.style.opacity = '0.2';
-                            }}
-                          />
-
-                        </div>
-
-                        <div className="relative w-[48%] space-y-2">
-
-                          <div className={`p-2.5 rounded-xl border flex justify-between items-center ${
-                            isDark
-                              ? 'bg-neutral-900/90 border-violet-500/20'
-                              : 'bg-white border-slate-200 shadow-sm'
-                          }`}>
-                            <span className={`text-xs ${textMuted}`}>
-                              Klatka
-                            </span>
-                            <span className="text-xs font-bold font-mono text-violet-400">
-                              {latestStats.chest || 0} cm
-                            </span>
-                          </div>
-
-                          <div className={`p-2.5 rounded-xl border flex justify-between items-center ${
-                            isDark
-                              ? 'bg-neutral-900/90 border-violet-500/20'
-                              : 'bg-white border-slate-200 shadow-sm'
-                          }`}>
-                            <span className={`text-xs ${textMuted}`}>
-                              Ramię
-                            </span>
-                            <span className="text-xs font-bold font-mono text-violet-400">
-                              {latestStats.arm || 0} cm
-                            </span>
-                          </div>
-
-                          <div className={`p-2.5 rounded-xl border flex justify-between items-center ${
-                            isDark
-                              ? 'bg-neutral-900/90 border-violet-500/20'
-                              : 'bg-white border-slate-200 shadow-sm'
-                          }`}>
-                            <span className={`text-xs ${textMuted}`}>
-                              Pas
-                            </span>
-                            <span className="text-xs font-bold font-mono text-violet-400">
-                              {latestStats.waist || 0} cm
-                            </span>
-                          </div>
-
-                          <div className={`p-2.5 rounded-xl border flex justify-between items-center ${
-                            isDark
-                              ? 'bg-neutral-900/90 border-violet-500/20'
-                              : 'bg-white border-slate-200 shadow-sm'
-                          }`}>
-                            <span className={`text-xs ${textMuted}`}>
-                              Udo
-                            </span>
-                            <span className="text-xs font-bold font-mono text-violet-400">
-                              {latestStats.thigh || 0} cm
-                            </span>
-                          </div>
-
-                        </div>
-                      </div>
-
-                      {/* WEIGHT */}
-                      <div className={`p-3 rounded-xl border flex justify-between items-center ${
-                        isDark
-                          ? 'bg-neutral-950 border-neutral-800'
-                          : 'bg-slate-100 border-slate-200'
-                      }`}>
-
-                        <div className="flex items-center space-x-2">
-
-                          <UserCheck className={`h-5 w-5 ${accentText}`} />
-
-                          <div>
-                            <div className="text-xs font-bold">
-                              Waga Ciała
-                            </div>
-
-                            <div className={`text-[10px] ${textMuted}`}>
-                              Ostatni pomiar
-                            </div>
-                          </div>
-
-                        </div>
-
-                        <div className="text-xl font-black font-mono tracking-tight text-violet-500">
-                          {latestStats.weight || 0}{' '}
-                          <span className="text-xs text-slate-400 font-normal">
-                            kg
-                          </span>
-                        </div>
-
-                      </div>
-
-                      {/* MEASUREMENT FORM */}
-                      <form
-                        onSubmit={saveBodyStats}
-                        className="space-y-3 pt-2 border-t border-slate-200 dark:border-neutral-800"
-                      >
-
-                        <div className="text-xs font-bold">
-                          Dodaj nowy pomiar:
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Waga (kg)"
-                            value={newWeight}
-                            onChange={e =>
-                              setNewWeight(e.target.value)
-                            }
-                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
-                          />
-
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Ramię (cm)"
-                            value={newArm}
-                            onChange={e =>
-                              setNewArm(e.target.value)
-                            }
-                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
-                          />
-
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Klatka (cm)"
-                            value={newChest}
-                            onChange={e =>
-                              setNewChest(e.target.value)
-                            }
-                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
-                          />
-
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Pas (cm)"
-                            value={newWaist}
-                            onChange={e =>
-                              setNewWaist(e.target.value)
-                            }
-                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
-                          />
-
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Udo (cm)"
-                            value={newThigh}
-                            onChange={e =>
-                              setNewThigh(e.target.value)
-                            }
-                            className={`p-2.5 rounded-xl border text-xs font-bold text-center ${bgInput}`}
-                          />
-
-                          <button
-                            type="submit"
-                            className={`py-2.5 ${accentBg} font-bold rounded-xl text-xs transition-colors`}
-                          >
-                            Zapisz
-                          </button>
-
-                        </div>
-                      </form>
-
-                      {/* MEASUREMENT HISTORY */}
-                      <div className="pt-3 border-t border-slate-200 dark:border-neutral-800 space-y-2">
-
-                        <div className="text-xs font-bold flex items-center space-x-1.5">
-                          <History className="h-4 w-4 text-violet-500" />
-                          <span>
-                            Pełna historia pomiarów:
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-
-                          {bodyStats.map(st => (
-                            <div
-                              key={st.id}
-                              className={`p-3 rounded-xl border space-y-1.5 ${
-                                isDark
-                                  ? 'bg-neutral-950 border-neutral-800'
-                                  : 'bg-slate-50 border-slate-200'
-                              }`}
-                            >
-
-                              <div className="flex justify-between items-center text-xs font-bold">
-
-                                <span className={textMuted}>
-                                  {formatDate(st.date)}
-                                </span>
-
-                                <span className="text-violet-400 font-mono font-black">
-                                  {st.weight || 0} kg
-                                </span>
-
-                              </div>
-
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                  isDark
-                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300'
-                                    : 'bg-white border-slate-200 text-slate-700'
-                                }`}>
-                                  Waga: <b>{st.weight || 0}</b> kg
-                                </span>
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                  isDark
-                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300'
-                                    : 'bg-white border-slate-200 text-slate-700'
-                                }`}>
-                                  Ramię: <b>{st.arm || 0}</b> cm
-                                </span>
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                  isDark
-                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300'
-                                    : 'bg-white border-slate-200 text-slate-700'
-                                }`}>
-                                  Klatka: <b>{st.chest || 0}</b> cm
-                                </span>
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                  isDark
-                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300'
-                                    : 'bg-white border-slate-200 text-slate-700'
-                                }`}>
-                                  Pas: <b>{st.waist || 0}</b> cm
-                                </span>
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                  isDark
-                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300'
-                                    : 'bg-white border-slate-200 text-slate-700'
-                                }`}>
-                                  Udo: <b>{st.thigh || 0}</b> cm
-                                </span>
-
-                              </div>
-                            </div>
-                          ))}
-
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-                )}
-
-                {/* EXERCISE HISTORY */}
-                {statsSubTab === 'history' && (
-                  <div className={`p-4 rounded-xl border space-y-3 ${bgCard}`}>
-
-                    <h3 className="font-bold text-sm flex items-center space-x-1.5">
-                      <History className={`h-4 w-4 ${accentText}`} />
-                      <span>Szczegółowa Historia Ćwiczenia</span>
-                    </h3>
-
-                    <select
-                      onChange={e =>
-                        setSelectedStatExId(e.target.value)
-                      }
-                      value={selectedStatExId || ''}
-                      className={`w-full p-2.5 rounded-xl border text-xs font-bold ${bgInput}`}
-                    >
-                      <option value="">
-                        -- Wybierz ćwiczenie z bazy --
-                      </option>
-
-                      {exerciseDb.map(ex => (
-                        <option key={ex.id} value={ex.id}>
-                          {ex.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    {selectedStatExId && (
-                      <div className="space-y-2 pt-2">
-
-                        {(() => {
-
-                          const targetEx = exerciseDb.find(
-                            e => e.id === selectedStatExId
-                          );
-
-                          const exHistory = workoutHistory.filter(w =>
-                            w.exercises.some(
-                              e =>
-                                (e.id &&
-                                  e.id === selectedStatExId) ||
-                                e.name === targetEx?.name
-                            )
-                          );
-
-                          if (exHistory.length === 0) {
-                            return (
-                              <p className={`text-xs ${textMuted} text-center py-2`}>
-                                Brak wykonanych treningów z tym ćwiczeniem.
-                              </p>
-                            );
-                          }
-
-                          return exHistory.map((w, idx) => {
-
-                            const exDetails = w.exercises.find(
-                              e =>
-                                (e.id &&
-                                  e.id === selectedStatExId) ||
-                                e.name === targetEx?.name
-                            );
-
-                            return (
-                              <div
-                                key={idx}
-                                className={`p-3 rounded-xl border space-y-1.5 text-xs ${
-                                  isDark
-                                    ? 'bg-neutral-950/80 border-neutral-800'
-                                    : 'bg-slate-50 border-slate-200'
-                                }`}
-                              >
-
-                                <div className="flex justify-between font-bold">
-                                  <span>
-                                    {formatDate(w.date)} ({w.planName})
-                                  </span>
-                                </div>
-
-                                <div className="flex flex-wrap gap-1.5">
-
-                                  {exDetails?.sets.map((s, sIdx) => (
-                                    <span
-                                      key={sIdx}
-                                      className={`px-2 py-1 rounded text-[11px] font-mono border ${
-                                        isDark
-                                          ? 'bg-neutral-900 border-neutral-700 text-violet-300'
-                                          : 'bg-white border-slate-300 text-violet-900'
-                                      }`}
-                                    >
-                                      S{sIdx + 1}:{' '}
-                                      <strong>{s.reps || 0}</strong>{' '}
-                                      ×{' '}
-                                      <strong>
-                                        {s.weight || 0}kg
-                                      </strong>
-                                    </span>
-                                  ))}
-
-                                </div>
-                              </div>
-                            );
-                          });
-                        })()}
-
-                      </div>
-                    )}
-                  </div>
-                )}
-
-              </div>
-            )}
-
-            {/* PLANS */}
-            {activeTab === 'plans' && (
-              <div className="space-y-4">
-
-                <div className="flex justify-between items-center">
-
-                  <h2 className="text-lg font-bold">
-                    Plany Treningowe
-                  </h2>
-
-                  {!isCreatingPlan && (
-                    <button
-                      onClick={() => setIsCreatingPlan(true)}
-                      className={`px-3 py-2 ${accentBg} font-bold text-xs rounded-xl flex items-center space-x-1`}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Dodaj plan</span>
-                    </button>
-                  )}
-
-                </div>
-
-                {isCreatingPlan && (
-                  <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
-
-                    <input
-                      type="text"
-                      placeholder="Nazwa planu (np. Push / Pull)"
-                      value={newPlanName}
-                      onChange={e =>
-                        setNewPlanName(e.target.value)
-                      }
-                      className={`w-full p-2.5 rounded-xl border text-sm ${bgInput}`}
-                    />
-
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-
-                      {exerciseDb.map(ex => (
-                        <button
-                          key={ex.id}
-                          onClick={() => {
-
-                            if (
-                              selectedExForPlan.includes(ex.id)
-                            ) {
-                              setSelectedExForPlan(
-                                selectedExForPlan.filter(
-                                  i => i !== ex.id
-                                )
-                              );
-                            } else {
-                              setSelectedExForPlan([
-                                ...selectedExForPlan,
-                                ex.id
-                              ]);
-                            }
-                          }}
-                          className={`w-full text-left p-2 rounded-lg text-xs flex justify-between items-center ${
-                            selectedExForPlan.includes(ex.id)
-                              ? isDark
-                                ? 'bg-violet-950 text-violet-400 font-bold'
-                                : 'bg-violet-50 text-indigo-700 font-bold'
-                              : textMuted
-                          }`}
-                        >
-                          <span>{ex.name}</span>
-
-                          {selectedExForPlan.includes(ex.id) && (
-                            <CheckCircle className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      ))}
-
-                    </div>
-
-                    <div className="flex space-x-2 pt-2">
-
-                      <button
-                        onClick={() => {
-
-                          if (
-                            !newPlanName ||
-                            selectedExForPlan.length === 0
-                          ) {
-                            return;
-                          }
-
-                          setPlans(prev => [
-                            ...prev,
-                            {
-                              id: Date.now().toString(),
-                              name: newPlanName,
-                              exerciseIds: selectedExForPlan
-                            }
-                          ]);
-
-                          setIsCreatingPlan(false);
-                          setNewPlanName('');
-                          setSelectedExForPlan([]);
-                        }}
-                        className={`flex-1 py-2.5 ${accentBg} font-bold rounded-xl text-xs`}
-                      >
-                        Zapisz Plan
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setIsCreatingPlan(false)
-                        }
-                        className={`px-4 py-2.5 border rounded-xl text-xs font-bold ${
-                          isDark
-                            ? 'border-neutral-800'
-                            : 'border-slate-300'
-                        }`}
-                      >
-                        Anuluj
-                      </button>
-
-                    </div>
-                  </div>
-                )}
-
-                {plans.map(p => (
-                  <div
-                    key={p.id}
-                    className={`p-4 rounded-2xl border flex justify-between items-center ${bgCard}`}
-                  >
-
-                    <div>
-                      <h3 className="font-bold text-sm">
-                        {p.name}
-                      </h3>
-
-                      <p className={`text-xs ${textMuted} mt-0.5`}>
-                        {p.exerciseIds.length} ćwiczeń w zestawieniu
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        setPlans(prev =>
-                          prev.filter(item => item.id !== p.id)
-                        )
-                      }
-                      className="text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* EXERCISES */}
-            {activeTab === 'exercises' && (
-              <div className="space-y-4">
-
-                <h2 className="text-lg font-bold">
-                  Baza Ćwiczeń
-                </h2>
-
-                <div className="flex space-x-2">
-
-                  <input
-                    type="text"
-                    placeholder="Nazwa nowego ćwiczenia..."
-                    value={newExName}
-                    onChange={e =>
-                      setNewExName(e.target.value)
-                    }
-                    className={`flex-1 p-2.5 rounded-xl border text-sm ${bgInput}`}
-                  />
-
-                  <button
-                    onClick={() => {
-
-                      if (!newExName) return;
-
-                      setExerciseDb(prev => [
-                        ...prev,
-                        {
-                          id: Date.now().toString(),
-                          name: newExName,
-                          category: 'Ogólne'
-                        }
-                      ]);
-
-                      setNewExName('');
-                    }}
-                    className={`px-4 ${accentBg} font-bold rounded-xl text-xs`}
-                  >
-                    Dodaj
-                  </button>
-
-                </div>
-
-                <div className={`border rounded-2xl divide-y ${bgCard} ${
-                  isDark
-                    ? 'divide-neutral-800'
-                    : 'divide-slate-200'
-                }`}>
-
-                  {exerciseDb.map(ex => (
-                    <div
-                      key={ex.id}
-                      className="p-3.5 flex justify-between items-center text-xs font-semibold"
-                    >
-
-                      <span>{ex.name}</span>
-
-                      <button
-                        onClick={() =>
-                          setExerciseDb(prev =>
-                            prev.filter(e => e.id !== ex.id)
-                          )
-                        }
-                        className="text-slate-400 hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-
-                    </div>
-                  ))}
-
-                </div>
-              </div>
-            )}
-
-            {/* SETTINGS */}
-            {activeTab === 'settings' && (
-              <div className="space-y-5">
-
-                <h2 className="text-lg font-bold">
-                  Ustawienia
-                </h2>
-
-                <div className={`p-4 rounded-2xl border flex justify-between items-center ${bgCard}`}>
-
-                  <div>
-                    <div className="text-sm font-bold">
-                      Motyw aplikacji
-                    </div>
-
-                    <div className={`text-xs ${textMuted}`}>
-                      Aplikacja zapamięta Twój wybór.
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() =>
-                      setTheme(isDark ? 'light' : 'dark')
-                    }
-                    className={`p-2.5 rounded-xl flex items-center space-x-2 text-xs font-bold border ${
-                      isDark
-                        ? 'bg-neutral-800 border-neutral-700 text-violet-400'
-                        : 'bg-slate-100 border-slate-300 text-slate-800'
-                    }`}
-                  >
-                    {isDark ? (
-                      <Sun className="h-4 w-4" />
-                    ) : (
-                      <Moon className="h-4 w-4" />
-                    )}
-
-                    <span>
-                      {isDark ? 'Jasny' : 'Ciemny'}
-                    </span>
-                  </button>
-
-                </div>
-
-                <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
-
-                  <div className={`flex items-center space-x-2 ${accentText}`}>
-                    <Bell className="h-4 w-4" />
-                    <span className="text-xs font-bold uppercase tracking-wider">
-                      Kreatyna o 9:00
-                    </span>
-                  </div>
-
-                  <p className={`text-xs ${textMuted}`}>
-                    Ustaw godzinę przypomnienia i pobierz plik `.ics` do Kalendarza na iOS lub Android.
-                  </p>
-
-                  <div className="flex space-x-2">
-
-                    <input
-                      type="time"
-                      value={creatineTime}
-                      onChange={e =>
-                        setCreatineTime(e.target.value)
-                      }
-                      className={`p-2.5 rounded-xl border text-xs font-bold ${bgInput}`}
-                    />
-
-                    <button
-                      onClick={downloadCreatineReminder}
-                      className={`flex-1 ${accentBg} font-bold rounded-xl text-xs py-2.5`}
-                    >
-                      Dodaj do Kalendarza iOS
-                    </button>
-
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-2xl border space-y-3 ${bgCard}`}>
-                  <div className="flex items-center gap-2">
-                    <Timer className={`h-4 w-4 ${accentText}`} />
-                    <span className="text-xs font-black uppercase tracking-wider">Domyślna przerwa</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[60, 90, 120].map(value => (
-                      <button
-                        key={value}
-                        onClick={() => setRestDuration(value)}
-                        className={`py-2.5 rounded-xl border text-xs font-black transition-all ${restDuration === value ? accentBg : isDark ? 'bg-neutral-950 border-neutral-800 text-neutral-400' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
-                      >{value}s</button>
-                    ))}
-                  </div>
-                  <p className={`text-[10px] ${textMuted}`}>Po oznaczeniu serii jako wykonanej timer uruchomi się automatycznie.</p>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
+    <div className={`${shell} min-h-screen transition-colors duration-200`}>
+      <Header />
+      <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 lg:px-6 lg:pb-10 lg:pt-7">
+        {activeTab === 'home' && <HomePage />}
+        {activeTab === 'workout' && <WorkoutPage />}
+        {activeTab === 'history' && <HistoryPage />}
+        {activeTab === 'stats' && <StatsPage />}
+        {activeTab === 'plans' && <PlansPage />}
+        {activeTab === 'exercises' && <ExercisesPage />}
+        {activeTab === 'settings' && <SettingsPage />}
       </main>
 
-      {/* START WORKOUT MODAL */}
-      {showStartModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-
-          <div className={`border rounded-2xl p-4 max-w-xs w-full space-y-3 ${bgCard}`}>
-
-            <div className="flex justify-between items-center">
-
-              <h3 className="font-bold text-sm">
-                Wybierz plan treningowy
-              </h3>
-
-              <button
-                onClick={() => setShowStartModal(false)}
-              >
-                <X className="h-4 w-4 text-slate-400" />
-              </button>
-
-            </div>
-
-            {plans.map(p => (
-              <button
-                key={p.id}
-                onClick={() => startWorkout(p)}
-                className={`w-full text-left p-3.5 rounded-xl border font-bold text-xs flex justify-between items-center transition-all ${
-                  isDark
-                    ? 'bg-violet-950/40 border-violet-500/30 text-violet-400 hover:bg-violet-900/40'
-                    : 'bg-violet-50 border-violet-200 text-violet-900 hover:bg-violet-100'
-                }`}
-              >
-                <span>{p.name}</span>
-                <Play className="h-3.5 w-3.5 fill-current" />
-              </button>
-            ))}
-
-          </div>
-        </div>
-      )}
-
-      {/* WORKOUT SUMMARY */}
-      {summaryData && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-
-          <div className={`border rounded-2xl p-5 max-w-sm w-full space-y-4 text-center ${bgCard}`}>
-
-            <div className="flex justify-center">
-
-              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-full">
-                <CheckCircle className="h-8 w-8" />
-              </div>
-
-            </div>
-
-            <h3 className="font-black text-lg">
-              Trening Ukończony!
-            </h3>
-
-            <div className={`grid grid-cols-3 gap-2 py-3 border-y text-center ${
-              isDark
-                ? 'border-neutral-800'
-                : 'border-slate-200'
-            }`}>
-
-              <div>
-                <div className={`text-[10px] ${textMuted}`}>
-                  Czas
-                </div>
-                <div className="font-bold text-sm">
-                  {summaryData.duration}
-                </div>
-              </div>
-
-              <div>
-                <div className={`text-[10px] ${textMuted}`}>
-                  Powtórzenia
-                </div>
-                <div className="font-bold text-sm">
-                  {summaryData.totalReps}
-                </div>
-              </div>
-
-              <div>
-                <div className={`text-[10px] ${textMuted}`}>
-                  Tonaż
-                </div>
-                <div className={`font-bold text-sm ${accentText}`}>
-                  {summaryData.totalWeight} kg
-                </div>
-              </div>
-
-            </div>
-
-            <button
-              onClick={() => setSummaryData(null)}
-              className={`w-full py-3 ${accentBg} font-bold rounded-xl text-xs`}
-            >
-              Zamknij
-            </button>
-
-          </div>
-        </div>
-      )}
-
-      {/* BOTTOM NAVIGATION */}
-      {!activeSession && !showSplash && (
-        <nav className={`fixed bottom-0 left-0 right-0 border-t px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around z-40 backdrop-blur-xl ${
-          isDark
-            ? 'bg-neutral-950/90 border-neutral-800'
-            : 'bg-white/90 border-slate-200 shadow-lg'
-        }`}>
-
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'history'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <CalendarIcon className="h-4 w-4 mb-0.5" />
-            <span>Historia</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'stats'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <BarChart3 className="h-4 w-4 mb-0.5" />
-            <span>Statystyki</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('plans')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'plans'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <Dumbbell className="h-4 w-4 mb-0.5" />
-            <span>Plany</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('start')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'start'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <Play className="h-4 w-4 mb-0.5 fill-current" />
-            <span>Start</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('exercises')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'exercises'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <Plus className="h-4 w-4 mb-0.5" />
-            <span>Ćwiczenia</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`flex flex-col items-center gap-0.5 min-w-[54px] px-2 py-1.5 rounded-2xl text-[10px] font-black transition-all ${
-              activeTab === 'settings'
-                ? isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-indigo-50 text-indigo-700'
-                : textMuted
-            }`}
-          >
-            <Settings className="h-4 w-4 mb-0.5" />
-            <span>Ustawienia</span>
-          </button>
-
-        </nav>
-      )}
-
+      {!activeSession && <nav className={`fixed bottom-0 left-0 right-0 z-50 border-t backdrop-blur-xl lg:sticky lg:bottom-auto lg:mx-auto lg:max-w-6xl lg:rounded-3xl lg:border ${isDark ? 'bg-[#0a0b10]/92 border-white/[0.06]' : 'bg-white/92 border-[#e7eaf0]'}`}><div className="mx-auto flex max-w-6xl items-center justify-around gap-1 px-2 py-2 lg:px-3">{navItems.map(({id,label,icon:Icon,primary:isPrimary})=><button key={id} onClick={()=>setActiveTab(id)} className={`flex min-w-0 flex-1 flex-col items-center rounded-2xl px-2 py-2 text-[10px] font-black transition ${activeTab===id ? (isPrimary ? 'bg-[#5b4df4] text-white shadow-[0_8px_25px_rgba(91,77,244,0.2)]' : `${primaryText} ${isDark?'bg-white/[0.05]':'bg-[#f4f2ff]'}`) : muted}`}><Icon className={`mb-1 h-4 w-4 ${isPrimary && activeTab===id?'fill-current':''}`}/><span>{label}</span></button>)}</div></nav>}
+      <PlanSheet />
+      <FinishSheet />
+      <Toast />
     </div>
   );
 }
