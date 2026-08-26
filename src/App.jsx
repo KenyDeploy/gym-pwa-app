@@ -77,7 +77,7 @@ export default function WorkoutApp() {
   const [creatineTime, setCreatineTime] = useState('09:00');
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // SPLASH SCREEN TIMER (Ukrywa splash po 2.5 sekundach)
+  // SPLASH SCREEN TIMER
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -267,8 +267,8 @@ END:VCALENDAR`;
       {showSplash && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white transition-opacity duration-500">
           <img 
-            src="/logo.gif" 
-            alt="Ładowanie..." 
+            src="/logo.gif?v=1" 
+            alt="Pakiernia U Matiego" 
             className="w-48 h-48 object-cover rounded-2xl mb-4 border-2 border-cyan-400 shadow-xl shadow-cyan-500/30" 
           />
           <h1 className="text-xl font-black uppercase tracking-widest text-cyan-400">
